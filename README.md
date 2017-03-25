@@ -1,4 +1,4 @@
-# Bandwidth-Limited ISP Data Pollution
+# ISP Data Pollution
 
 Re: [Senate Puts ISP Profits Over Your Privacy](https://www.eff.org/deeplinks/2017/03/senate-puts-isp-profits-over-your-privacy)
  
