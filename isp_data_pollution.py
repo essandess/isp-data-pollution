@@ -159,10 +159,11 @@ images, and respects robots.txt, which all provide good security.
         if self.check_size_and_set_mimetype(url) and self.mimetype == 'text/html':
             self.data_usage += self.content_length
             try:
-                if self.check_robots(url): response = self.session.get(url,allow_redirects=True,timeout=10)
+                if self.check_robots(url):
+                    response = self.session.get(url,allow_redirects=True,timeout=10)
+                    if len(self.links) < self.max_links_cached: self.add_url_links(response.content.decode('utf-8'))
             except BaseException as e:
                 print(e)
-            if len(self.links) < self.max_links_cached: self.add_url_links(response.content.decode('utf-8'))
 
     def check_size_and_set_mimetype(self,url,maximum=1048576):
         '''Return True if not too large, set the mimetype as well.'''
