@@ -112,7 +112,7 @@ images, and respects robots.txt, which all provide good security.
         self.set_user_agent()
         if len(self.links) < self.max_links_cached:
             word = random.choice(self.words)
-            # if self.debug: print('Word \'{}\'...'.format(word))
+            # if self.debug: print('Seeding with search for \'{}\'...'.format(word))
             self.add_search_links(self.websearch(word).content.decode('utf-8'))
         # if self.debug: print('There are {:d} links.'.format(len(self.links)))
         url = self.remove_link()
@@ -168,6 +168,7 @@ images, and respects robots.txt, which all provide good security.
         if self.link_count[domain] < self.max_links_per_domain:
             self.links.add(url)
             self.increment_link_count(url,domain)
+            # if self.debug: print('\tAdded link \'{}\'...'.format(url))
         return self.link_count[domain]
 
     def decrement_link_count(self,url,domain=None):
@@ -184,7 +185,7 @@ images, and respects robots.txt, which all provide good security.
         return '.'.join(uprs.urlparse(url).netloc.split('.')[-2:])
 
     def websearch(self,query):
-        url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query=query))
+        url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}'.format(query)))
         return self.session.get(url)
 
     def get_url(self,url):
