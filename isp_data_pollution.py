@@ -29,8 +29,10 @@ os.nice(15)
 gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
 max_links_per_page = 100	# Maximum number of links to add per page
+max_links_per_domain = 200	# Maximum number of links to add per domain
 search_url = 'http://startpage.com/do/search'	# Ensure no javascript, keep unencrypted for ISP DPI
 word_site = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
+black_list = { 'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com' }  # startpage-specific
 
 # tell my ISP that I use a really awful browser, along with random user agents (below)
 user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
@@ -60,21 +62,26 @@ images, and respects robots.txt, which all provide good security.
     def __init__(self,gb_per_month=gb_per_month,
                  max_links_cached=max_links_cached,
                  max_links_per_page=max_links_per_page,
+                 max_links_per_domain=max_links_per_domain,
                  user_agent=user_agent,
                  search_url=search_url,
                  word_site=word_site,
+                 black_list=black_list,
                  debug=False):
         self.gb_per_month = gb_per_month
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
+        self.max_links_per_domain = max_links_per_domain
         self.user_agent = user_agent
         self.search_url = search_url
         self.word_site = word_site
+        self.black_list = black_list
         self.debug = debug
         self.fake = Factory.create()
         self.rp = robotparser.RobotFileParser()
         self.clear_cookies_trigger = True
         self.links = set()
+        self.link_count = dict()
         self.start_time = time.time()
         self.data_usage = 0
         self.open_session()
@@ -108,8 +115,7 @@ images, and respects robots.txt, which all provide good security.
             # if self.debug: print('Word \'{}\'...'.format(word))
             self.add_search_links(self.websearch(word).content.decode('utf-8'))
         # if self.debug: print('There are {:d} links.'.format(len(self.links)))
-        url = random.sample(self.links,1)[0];
-        self.links.remove(url)	# pop a random item from the stack
+        url = self.remove_link()
         if self.debug: print(url)
         self.get_url(url)
 
@@ -150,6 +156,33 @@ images, and respects robots.txt, which all provide good security.
         self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
         self.session.headers.update( {'User-Agent': self.user_agent} )
 
+    def remove_link(self):
+        url = random.sample(self.links,1)[0];
+        self.links.remove(url)	# pop a random item from the stack
+        self.decrement_link_count(url)
+        return url
+
+    def add_link(self,url):
+        domain = self.domain_name(url)
+        self.link_count.setdefault(domain,0)
+        if self.link_count[domain] < self.max_links_per_domain:
+            self.links.add(url)
+            self.increment_link_count(url,domain)
+        return self.link_count[domain]
+
+    def decrement_link_count(self,url,domain=None):
+        if domain is None: domain = self.domain_name(url)
+        self.link_count.setdefault(domain,0)
+        if self.link_count[domain] > 0: self.link_count[domain] -= 1
+
+    def increment_link_count(self,url,domain=None):
+        if domain is None: domain = self.domain_name(url)
+        self.link_count.setdefault(domain,0)
+        self.link_count[domain] += 1
+
+    def domain_name(self,url):
+        return '.'.join(uprs.urlparse(url).netloc.split('.')[-2:])
+
     def websearch(self,query):
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query=query))
         return self.session.get(url)
@@ -188,18 +221,17 @@ images, and respects robots.txt, which all provide good security.
         url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(path='/robots.txt',query='',params=''))
         self.rp.set_url(url_robots)
         self.rp.read()
-        return self.rp.can_fetch('*',url)
+        return self.rp.can_fetch(self.user_agent,url)
 
     def add_search_links(self,doc):
         html = lxml.html.document_fromstring(doc)
         k = 0
         for element, attribute, link, pos in html.iterlinks():
             if attribute == 'href':
-                upn = '.'.join(uprs.urlparse(link).netloc.split('.')[-2:])
-                if not ( upn == 'startpage.com' or upn == 'startmail.com' or upn == 'ixquick-proxy.com' ):  # startpage-specific
+                if self.domain_name(link) not in self.black_list:
                     ups = uprs.urlparse(link).scheme
                     if ups == 'http' or ups == 'https':
-                        self.links.add(link)
+                        self.add_link(link)
                         k += 1
                         if k > self.max_links_per_page: break
 
@@ -210,7 +242,7 @@ images, and respects robots.txt, which all provide good security.
             if attribute == 'href':
                 ups = uprs.urlparse(link).scheme
                 if (ups == 'http' or ups == 'https') and len(self.links) < self.max_links_cached:
-                    self.links.add(link)
+                    self.add_link(link)
                     k += 1
                     if k > self.max_links_per_page: break
 
