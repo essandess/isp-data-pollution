@@ -123,7 +123,8 @@ images, and respects robots.txt, which all provide good security.
         if self.bandwidth_test():
             # decimate the stack and clear the cookies
             if len(self.links) > int(np.ceil(0.81*self.max_links_cached)):
-                self.links.difference_update(random.sample(self.links,int(np.ceil(len(self.links)/10.))))
+                for url in random.sample(self.links,int(np.ceil(len(self.links)/10.))):
+                    self.remove_link(url)
             time.sleep(120)
 
     def every_day_tasks(self):
@@ -141,7 +142,8 @@ images, and respects robots.txt, which all provide good security.
             self.start_time = time.time()
             self.data_usage = 0
             if len(self.links) > int(np.ceil(0.49*self.max_links_cached)):
-                self.links.difference_update(random.sample(self.links,int(np.ceil(len(self.links)/3.))))
+                for url in random.sample(self.links,int(np.ceil(len(self.links)/3.))):
+                    self.remove_link(url)
             # restart the session
             del self.session
             self.open_session()
