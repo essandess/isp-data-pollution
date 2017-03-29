@@ -203,7 +203,8 @@ images, and respects robots.txt, which all provide good security.
                            'http://www.cnbc.com/',
                            'https://www.yahoo.com'] )
         if len(self.links) < self.max_links_cached:
-            word = random.choice(self.words)
+            num_words = max(1,npr.poisson(1))
+            word = ' '.join(random.sample(self.words,num_words))
             # if self.debug: print('Seeding with search for \'{}\'...'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
             self.add_url_links(self.websearch(word))
