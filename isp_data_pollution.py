@@ -33,8 +33,8 @@ os.nice(15)
 
 gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
-max_links_per_page = 100	# Maximum number of links to add per page
-max_links_per_domain = 200	# Maximum number of links to add per domain
+max_links_per_page = 200	# Maximum number of links to add per page
+max_links_per_domain = 500	# Maximum number of links to add per domain
 search_url = 'http://www.google.com/search'	# Ensure no javascript, keep unencrypted for ISP DPI
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
 
@@ -158,8 +158,8 @@ images, and respects robots.txt, which all provide good security.
             tmpfile.close()
         except BaseException as e:
             print(e)
-        # ignore these too
-        self.blacklist_domains |= {'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com'}  # startpage-specific
+        # ignore reductive subgraphs too
+        self.blacklist_domains |= { 'wikipedia.org', 'wiktionary.org', 'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com' }  # wiki, startpage-specific
 
     def get_random_words(self):
         try:
@@ -186,11 +186,11 @@ images, and respects robots.txt, which all provide good security.
                 self.every_day_tasks()
                 self.every_two_weeks_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
-            except BaseException as e:
+            except (BaseException,TimeoutException) as e:
                 print(e)
 
     def pollute(self):
-        if len(self.links) < 1000: self.seed_links()
+        if len(self.links) < 2000: self.seed_links()
         url = self.remove_link()
         if self.debug: print('{} from {:d} links'.format(url,len(self.links)))
         self.get_url(url)
@@ -243,6 +243,7 @@ images, and respects robots.txt, which all provide good security.
                 self.session.delete_all_cookies()
                 self.seed_links()
                 # restart the session
+                self.session.quit()
                 del self.session
                 self.open_session()
                 self.clear_cookies_trigger = False
@@ -319,7 +320,7 @@ images, and respects robots.txt, which all provide good security.
                 doc = self.session.execute_script("return document.getElementsByTagName('html')[0].innerHTML")
                 self.data_usage += len(doc)
                 if len(self.links) < self.max_links_cached: self.add_url_links(doc)
-        except BaseException as e:
+        except (BaseException,TimeoutException) as e:
             print(e)
 
     # no HTTP HEAD support in phantomjs
@@ -351,7 +352,10 @@ images, and respects robots.txt, which all provide good security.
     def add_url_links(self,doc):
         html = lxml.html.document_fromstring(doc)
         k = 0
-        for element, attribute, link, pos in html.iterlinks():
+        # random order of the generator html.iterlinks()
+        def yielding(ls):
+            for i in ls: yield i
+        for element, attribute, link, pos in sorted(yielding(html.iterlinks()),key=lambda k: random.random()):
             if attribute == 'href':
                 ups = uprs.urlparse(link).scheme
                 if (ups == 'http' or ups == 'https') and not self.blacklisted(link):
