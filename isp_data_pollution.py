@@ -151,7 +151,7 @@ images, and respects robots.txt, which all provide good security.
             # downloads	homestyle	politics	socialnet
             # drugs		hospitals	porn		spyware
             # dynamic		imagehosting	radiotv		tracker
-            for member in [ 'downloads', 'drugs', 'gamble', 'porn', 'spyware', 'violence', 'warez' ]:
+            for member in [ 'downloads', 'drugs', 'hacking', 'gamble', 'porn', 'spyware', 'updatesites', 'urlshortener', 'violence', 'warez', 'weapons' ]:
                 self.blacklist_domains |= set(tgz.extractfile('BL/{}/domains'.format(member)).read().decode('utf-8').splitlines())
                 self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
             tgz.close()
