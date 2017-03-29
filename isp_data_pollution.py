@@ -141,6 +141,10 @@ images, and respects robots.txt, which all provide good security.
             driver.set_page_load_timeout(30)
             self.session = driver
 
+    def quit_session(self):
+        self.session.quit()
+        del self.session
+
     def get_blacklist(self):
         self.blacklist_domains = set()
         self.blacklist_urls = set()
@@ -200,7 +204,9 @@ images, and respects robots.txt, which all provide good security.
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
                 if self.diurnal_cycle_test():
+                    self.open_session()
                     self.pollute()
+                    self.quit_session()
                 else:
                     time.sleep(self.chi2_mean_std(3.,1.))
                 self.elapsed_time = time.time() - self.start_time
@@ -262,13 +268,13 @@ images, and respects robots.txt, which all provide good security.
             # clear out cookies every day, and seed more links
             if self.clear_cookies_trigger:
                 self.set_user_agent()
-                # self.session.cookies.clear() # requests session
-                self.session.delete_all_cookies()
-                self.seed_links()
-                # restart the session
-                self.session.quit()
-                del self.session
-                self.open_session()
+                if hasattr(self,'session'):
+                    # self.session.cookies.clear() # requests session
+                    self.session.delete_all_cookies()
+                    self.seed_links()
+                    # restart the session
+                    self.quit_session()
+                    self.open_session()
                 self.clear_cookies_trigger = False
         else:
             self.clear_cookies_trigger = True
