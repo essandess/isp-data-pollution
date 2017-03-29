@@ -12,6 +12,10 @@ The [alternative](https://arstechnica.com/information-technology/2017/03/how-isp
 
 This crawler uses the Python selenium, phantomjs, and lxml.html libraries, uses blacklists for undesirable websites (see the code for details), does not download images, and respects robots.txt, which all provide good security.
 
+# Privatizing Proxy Filter with VPN Access
+
+Data pollution is one component of privatizing your personal data. Also see the repos [osxfortress](../../../osxfortress) and [osx-openvpn-server](../../../osx-openvpn-server) to block advertising, trackers, and malware across devices.
+
 # Running
 
 `python3 isp_data_pollution.py`
