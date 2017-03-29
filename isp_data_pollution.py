@@ -51,6 +51,25 @@ blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 # tell my ISP that I use a really awful browser, along with random user agents (below)
 user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
 
+# fix via override the read class method in RobotFileParser
+# many sites ill block access to robots.txt without a standard User-Agent header
+class RobotFileParserUserAgent(robotparser.RobotFileParser):
+    def read(self):
+        """Reads the robots.txt URL and feeds it to the parser."""
+        try:
+            headers = {'User-Agent': user_agent, }
+            request = urllib.request.Request(self.url, None, headers)
+            f = urllib.request.urlopen(request)
+            # f = urllib.request.urlopen(self.url)   #! original code
+        except urllib.error.HTTPError as err:
+            if err.code in (401, 403):
+                self.disallow_all = True
+            elif err.code >= 400 and err.code < 500:
+                self.allow_all = True
+        else:
+            raw = f.read()
+            self.parse(raw.decode("utf-8").splitlines())
+
 class ISPDataPollution:
     '''Re: https://www.eff.org/deeplinks/2017/03/senate-puts-isp-profits-over-your-privacy
  
@@ -92,10 +111,9 @@ images, and respects robots.txt, which all provide good security.
         self.wordsite_url = wordsite_url
         self.debug = debug
         self.fake = Factory.create()
-        self.rp = robotparser.RobotFileParser()
+        self.rp = RobotFileParserUserAgent()
         self.clear_cookies_trigger = True
         self.links = set()
-        self.links = set(['http://xfinity.com/', 'https://www.yahoo.com']) # initialize link-heavy ISP-oriented content
         self.link_count = dict()
         self.start_time = time.time()
         self.data_usage = 0
@@ -127,7 +145,10 @@ images, and respects robots.txt, which all provide good security.
         self.blacklist_domains = set()
         self.blacklist_urls = set()
         try:
-            if False: raise Exception('Skip downloading the blacklist.')
+            if True:    # download the blacklist or not
+                print('Downloading the blacklist...')
+            else:
+                raise Exception('Skip downloading the blacklist.')
             # http://stackoverflow.com/questions/18623842/read-contents-tarfile-into-python-seeking-backwards-is-not-allowed
             tgzstream = urllib.request.urlopen(urllib.request.Request(self.blacklist_url, headers={'User-Agent': self.user_agent}))
             tmpfile = BytesIO()
@@ -156,6 +177,7 @@ images, and respects robots.txt, which all provide good security.
                 self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
             tgz.close()
             tmpfile.close()
+            print('done.')
         except BaseException as e:
             print(e)
         # ignore reductive subgraphs too
@@ -266,7 +288,7 @@ images, and respects robots.txt, which all provide good security.
 
     def remove_link(self):
         url = random.sample(self.links,1)[0];
-        self.links.remove(url)	# pop a random item from the stack
+        self.links.remove(url)  # pop a random item from the stack
         self.decrement_link_count(url)
         return url
 
