@@ -117,7 +117,6 @@ images, and respects robots.txt, which all provide good security.
         self.link_count = dict()
         self.start_time = time.time()
         self.data_usage = 0
-        self.open_session()
         self.get_blacklist()
         self.get_random_words()
         self.pollute_forever()
@@ -200,7 +199,9 @@ images, and respects robots.txt, which all provide good security.
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
     def pollute_forever(self):
+        self.open_session()
         self.seed_links()
+        self.quit_session()
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
                 if self.diurnal_cycle_test():
