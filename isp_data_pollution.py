@@ -234,7 +234,7 @@ images, and respects robots.txt, which all provide good security.
         if len(self.links) < self.max_links_cached:
             num_words = max(1,npr.poisson(1))
             word = ' '.join(random.sample(self.words,num_words))
-            # if self.debug: print('Seeding with search for \'{}\'...'.format(word))
+            if self.debug: print('Seeding with search for \'{}\'...'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
             self.add_url_links(self.websearch(word))
 
@@ -393,6 +393,7 @@ images, and respects robots.txt, which all provide good security.
                     if k > self.max_links_per_page: break
             # elif attribute == 'action' and link == '/cgi-bin/captcha':
             #     raise Exception('Go to {} and solve a captha.'.format(self.search_url))
+        if self.debug: print('\tAdded {:d} links.'.format(k))
 
     def blacklisted(self,link):
         return link in self.blacklist_urls or self.domain_name(link) in self.blacklist_domains
