@@ -20,7 +20,7 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, tarfile, time
+import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -109,6 +109,7 @@ images, and respects robots.txt, which all provide good security.
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
         self.debug = debug
+        signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         self.fake = Factory.create()
         self.rp = RobotFileParserUserAgent()
         self.clear_cookies_trigger = True
@@ -134,7 +135,7 @@ images, and respects robots.txt, which all provide good security.
             dcap['phantomjs.page.settings.userAgent'] = ( self.user_agent )
             dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
             dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
-            driver = webdriver.PhantomJS(desired_capabilities=dcap)
+            driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=['--ignore-ssl-errors=true','--ssl-protocol=any'])
             driver.set_window_size(1296,1018)   #Tor browser size on Linux
             driver.implicitly_wait(30)
             driver.set_page_load_timeout(30)
@@ -328,13 +329,16 @@ images, and respects robots.txt, which all provide good security.
         '''HTTP GET of a websearch, then add any embedded links.'''
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}'.format(query)))
         # return self.session.get(url)
+        signal.alarm(20)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
-            self.data_usage += len(self.session.page_source)
-            new_links = self.websearch_links()
-            if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
-        except BaseException as e:
+        except self.TimeoutError as e:
             print(e)
+        finally:
+            signal.alarm(0)  # cancel the alarm
+        self.data_usage += len(self.session.page_source)
+        new_links = self.websearch_links()
+        if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
 
     def websearch_links(self):
         '''Webpage format for a popular search engine, <div class="g">'''
@@ -344,14 +348,17 @@ images, and respects robots.txt, which all provide good security.
 
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
+        if not self.check_robots(url): return  # bail out if robots.txt says to
+        signal.alarm(20)  # set an alarm
         try:
-            if self.check_robots(url):
-                self.session.get(url)
-                self.data_usage += len(self.session.page_source)
-                new_links = self.url_links()
-                if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
-        except BaseException as e:
+            self.session.get(url)  # selenium driver
+        except self.TimeoutError as e:
             print(e)
+        finally:
+            signal.alarm(0)  # cancel the alarm
+        self.data_usage += len(self.session.page_source)
+        new_links = self.url_links()
+        if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
 
     def url_links(self):
         '''Generic webpage link finder format.'''
@@ -382,6 +389,22 @@ images, and respects robots.txt, which all provide good security.
         running_bandwidth = running_bandwidth/407.	# Convert to GB/month, 2**30/(3600*24*30.5)
         # if self.debug: print('Using {} GB/month'.format(running_bandwidth))
         return running_bandwidth > self.gb_per_month
+
+    # handle phantomjs timeouts
+    class TimeoutError(Exception):
+        pass
+
+    def phantomjs_hang_handler(self):
+        # https://github.com/detro/ghostdriver/issues/334
+        # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
+        print('Looks like phantomjs has hung.')
+        try:
+            self.quit_session()
+            self.open_session()
+        except BaseException as e:
+            print(e)
+            raise self.TimeoutError('Unable to quit the session as well.')
+        raise self.TimeoutError('phantomjs is taking too long')
 
     # original requests-based code fragments
     # def get_url(self,url):
