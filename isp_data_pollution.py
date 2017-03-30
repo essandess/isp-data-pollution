@@ -20,11 +20,10 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import datetime as dt, lxml.html, numpy as np, numpy.random as npr, os, random, requests, tarfile, time
+import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.common.exceptions import TimeoutException
 from io import BytesIO
 from faker import Factory
 
@@ -136,6 +135,7 @@ images, and respects robots.txt, which all provide good security.
             dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
             dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
             driver = webdriver.PhantomJS(desired_capabilities=dcap)
+            driver.set_window_size(1296,1018)   #Tor browser size on Linux
             driver.implicitly_wait(30)
             driver.set_page_load_timeout(30)
             self.session = driver
@@ -215,13 +215,12 @@ images, and respects robots.txt, which all provide good security.
                 self.every_day_tasks()
                 self.every_two_weeks_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
-            except (BaseException,TimeoutException) as e:
+            except BaseException as e:
                 print(e)
 
     def pollute(self):
         if len(self.links) < 2000: self.seed_links()
         url = self.remove_link()
-        if self.debug: print('{} from {:d} links'.format(url,len(self.links)))
         self.get_url(url)
 
     def seed_links(self):
@@ -236,7 +235,7 @@ images, and respects robots.txt, which all provide good security.
             word = ' '.join(random.sample(self.words,num_words))
             if self.debug: print('Seeding with search for \'{}\'...'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
-            self.add_url_links(self.websearch(word))
+            self.get_websearch(word)
 
     def diurnal_cycle_test(self):
         now = dt.datetime.now()
@@ -324,13 +323,66 @@ images, and respects robots.txt, which all provide good security.
     def domain_name(self,url):
         return '.'.join(uprs.urlparse(url).netloc.split('.')[-2:])
 
-    def websearch(self,query):
+    def get_websearch(self,query):
+        '''HTTP GET of a websearch, then add any embedded links.'''
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}'.format(query)))
         # return self.session.get(url)
-        self.session.get(url)  # selenium driver
-        doc = self.session.execute_script("return document.getElementsByTagName('html')[0].innerHTML")
-        return doc
+        try:
+            self.session.get(url)  # selenium driver
+            self.data_usage += len(self.session.page_source)
+            new_links = self.websearch_links()
+            if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
+        except BaseException as e:
+            print(e)
 
+    def websearch_links(self):
+        '''Webpage format for a popular search engine, <div class="g">'''
+        return [ div.find_element_by_tag_name('a').get_attribute('href') \
+            for div in self.session.find_elements_by_css_selector('div.g') \
+                 if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
+
+    def get_url(self,url):
+        '''HTTP GET of the url, and add any embedded links.'''
+        try:
+            if self.check_robots(url):
+                self.session.get(url)
+                self.data_usage += len(self.session.page_source)
+                new_links = self.url_links()
+                if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
+        except BaseException as e:
+            print(e)
+
+    def url_links(self):
+        '''Generic webpage link finder format.'''
+        return [ a.get_attribute('href') \
+                 for a in self.session.find_elements_by_tag_name('a') \
+                 if a.get_attribute('href') is not None ]
+
+    def check_robots(self,url):
+        url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(path='/robots.txt',query='',params=''))
+        self.rp.set_url(url_robots)
+        self.rp.read()
+        return self.rp.can_fetch(self.user_agent,url)
+
+    def add_url_links(self,links):
+        k = 0
+        for link in sorted(links,key=lambda k: random.random()):
+            lp = uprs.urlparse(link)
+            if (lp.scheme == 'http' or lp.scheme == 'https') and not self.blacklisted(link):
+                if self.add_link(link): k += 1
+                if k > self.max_links_per_page: break
+        if self.debug: print('Added {:d} links, {:d} total at url \'{}\'.'.format(k,len(self.links),self.session.current_url))
+
+    def blacklisted(self,link):
+        return link in self.blacklist_urls or self.domain_name(link) in self.blacklist_domains
+
+    def bandwidth_test(self):
+        running_bandwidth = self.data_usage/(self.elapsed_time+900.)
+        running_bandwidth = running_bandwidth/407.	# Convert to GB/month, 2**30/(3600*24*30.5)
+        # if self.debug: print('Using {} GB/month'.format(running_bandwidth))
+        return running_bandwidth > self.gb_per_month
+
+    # original requests-based code fragments
     # def get_url(self,url):
     #     '''HTTP GET of the url, and add any embedded links.'''
     #     if self.check_size_and_set_mimetype(url) and self.mimetype == 'text/html':
@@ -341,17 +393,6 @@ images, and respects robots.txt, which all provide good security.
     #                 if len(self.links) < self.max_links_cached: self.add_url_links(response.content.decode('utf-8'))
     #         except BaseException as e:
     #             print(e)
-
-    def get_url(self,url):
-        '''HTTP GET of the url, and add any embedded links.'''
-        try:
-            if self.check_robots(url):
-                self.session.get(url)
-                doc = self.session.execute_script("return document.getElementsByTagName('html')[0].innerHTML")
-                self.data_usage += len(doc)
-                if len(self.links) < self.max_links_cached: self.add_url_links(doc)
-        except (BaseException,TimeoutException) as e:
-            print(e)
 
     # no HTTP HEAD support in phantomjs
     # def check_size_and_set_mimetype(self,url,maximum=1048576):
@@ -372,37 +413,6 @@ images, and respects robots.txt, which all provide good security.
     #         print(e)
     #         return False
     #     return True
-
-    def check_robots(self,url):
-        url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(path='/robots.txt',query='',params=''))
-        self.rp.set_url(url_robots)
-        self.rp.read()
-        return self.rp.can_fetch(self.user_agent,url)
-
-    def add_url_links(self,doc):
-        html = lxml.html.document_fromstring(doc)
-        k = 0
-        # random order of the generator html.iterlinks()
-        def yielding(ls):
-            for i in ls: yield i
-        for element, attribute, link, pos in sorted(yielding(html.iterlinks()),key=lambda k: random.random()):
-            if attribute == 'href':
-                ups = uprs.urlparse(link).scheme
-                if (ups == 'http' or ups == 'https') and not self.blacklisted(link):
-                    if self.add_link(link): k += 1
-                    if k > self.max_links_per_page: break
-            # elif attribute == 'action' and link == '/cgi-bin/captcha':
-            #     raise Exception('Go to {} and solve a captha.'.format(self.search_url))
-        if self.debug: print('\tAdded {:d} links.'.format(k))
-
-    def blacklisted(self,link):
-        return link in self.blacklist_urls or self.domain_name(link) in self.blacklist_domains
-
-    def bandwidth_test(self):
-        running_bandwidth = self.data_usage/(self.elapsed_time+900.)
-        running_bandwidth = running_bandwidth/407.	# Convert to GB/month, 2**30/(3600*24*30.5)
-        # if self.debug: print('Using {} GB/month'.format(running_bandwidth))
-        return running_bandwidth > self.gb_per_month
 
 if __name__ == "__main__":
     ISPDataPollution(debug=True)
