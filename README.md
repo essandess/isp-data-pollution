@@ -25,7 +25,7 @@ Data pollution is one component of privatizing your personal data. Also see the 
 This is what was necessary on macOS:
 
 ```
-sudo port install selenenium phantomjs py34-lxml
+sudo port install selenenium phantomjs
 sudo -H pip-3.4 install selenium
 
 # if phantonjs fails to build because of an Xode configuration error: test with
