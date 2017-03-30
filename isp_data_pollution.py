@@ -303,7 +303,8 @@ images, and respects robots.txt, which all provide good security.
         domain = self.domain_name(url)
         self.link_count.setdefault(domain,0)
         if len(self.links) < self.max_links_cached \
-                and self.link_count[domain] < self.max_links_per_domain:
+                and self.link_count[domain] < self.max_links_per_domain \
+                and url not in self.links:
             self.links.add(url)
             self.increment_link_count(url,domain)
             result = True
