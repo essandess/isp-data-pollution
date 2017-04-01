@@ -33,8 +33,8 @@ os.nice(15)
 gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
 max_links_per_page = 200	# Maximum number of links to add per page
-max_links_per_domain = 500	# Maximum number of links to add per domain
-search_url = 'http://www.google.com/search'	# Ensure no javascript, keep unencrypted for ISP DPI
+max_links_per_domain = 400	# Maximum number of links to add per domain
+search_url = 'http://www.google.com/search'	# keep unencrypted for ISP DPI
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
 
 blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
@@ -68,6 +68,10 @@ class RobotFileParserUserAgent(robotparser.RobotFileParser):
         else:
             raw = f.read()
             self.parse(raw.decode("utf-8").splitlines())
+
+# Notes for the future:
+# 1. The bandwidth usage is undoubtedly (much) smaller because gzip encoding is used
+# 2. A lightweight proxy could be used for accurate bandwidth, and header editing
 
 class ISPDataPollution:
     '''Re: https://www.eff.org/deeplinks/2017/03/senate-puts-isp-profits-over-your-privacy
@@ -111,8 +115,9 @@ images, and respects robots.txt, which all provide good security.
         self.debug = debug
         signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         self.fake = Factory.create()
-        self.rp = RobotFileParserUserAgent()
-        self.clear_cookies_trigger = True
+        self.hour_trigger = True
+        self.twentyfour_hour_trigger = True
+        self.open_session()
         self.links = set()
         self.link_count = dict()
         self.start_time = time.time()
@@ -142,6 +147,7 @@ images, and respects robots.txt, which all provide good security.
             self.session = driver
 
     def quit_session(self):
+        # self.session.close()  # quit closes all windows
         self.session.quit()
         del self.session
 
@@ -200,21 +206,16 @@ images, and respects robots.txt, which all provide good security.
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
     def pollute_forever(self):
-        self.open_session()
         self.seed_links()
-        self.quit_session()
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
                 if self.diurnal_cycle_test():
-                    self.open_session()
                     self.pollute()
-                    self.quit_session()
                 else:
                     time.sleep(self.chi2_mean_std(3.,1.))
                 self.elapsed_time = time.time() - self.start_time
                 self.exceeded_bandwidth_tasks()
-                self.every_day_tasks()
-                self.every_two_weeks_tasks()
+                self.every_hour_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
             except BaseException as e:
                 print(e)
@@ -232,7 +233,7 @@ images, and respects robots.txt, which all provide good security.
                            'http://www.cnbc.com/',
                            'https://www.yahoo.com'] )
         if len(self.links) < self.max_links_cached:
-            num_words = max(1,npr.poisson(1))
+            num_words = max(1,int(np.round(npr.poisson(1)+0.5)))  # mean of 1.5 words per search
             word = ' '.join(random.sample(self.words,num_words))
             if self.debug: print('Seeding with search for \'{}\'...'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
@@ -264,21 +265,32 @@ images, and respects robots.txt, which all provide good security.
                     self.remove_link(url)
             time.sleep(120)
 
-    def every_day_tasks(self):
-        if int(self.elapsed_time/3600. % 24.) == 23:
-            # clear out cookies every day, and seed more links
-            if self.clear_cookies_trigger:
+    def every_hour_tasks(self):
+        if int(self.elapsed_time/60. % 60.) == 59:
+            # reset user agent, clear out cookies
+            if self.hour_trigger:
                 self.set_user_agent()
                 if hasattr(self,'session'):
                     # self.session.cookies.clear() # requests session
                     self.session.delete_all_cookies()
+                self.hour_trigger = False
+        else:
+            self.hour_trigger = True
+        self.every_day_tasks()
+        self.every_two_weeks_tasks()
+
+    def every_day_tasks(self):
+        if int(self.elapsed_time/3600. % 24.) == 23:
+            # clear out cookies every day, and seed more links
+            if self.twentyfour_hour_trigger:
+                if hasattr(self,'session'):
                     self.seed_links()
                     # restart the session
                     self.quit_session()
                     self.open_session()
-                self.clear_cookies_trigger = False
+                self.twentyfour_hour_trigger = False
         else:
-            self.clear_cookies_trigger = True
+            self.twentyfour_hour_trigger = True
 
     def every_two_weeks_tasks(self):
         if self.elapsed_time > 3600.*24*14:
@@ -342,9 +354,13 @@ images, and respects robots.txt, which all provide good security.
 
     def websearch_links(self):
         '''Webpage format for a popular search engine, <div class="g">'''
-        return [ div.find_element_by_tag_name('a').get_attribute('href') \
-            for div in self.session.find_elements_by_css_selector('div.g') \
-                 if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
+        try:
+            return [ div.find_element_by_tag_name('a').get_attribute('href') \
+                for div in self.session.find_elements_by_css_selector('div.g') \
+                     if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
+        except BaseException as e:
+            print(e)
+            return []
 
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
@@ -362,15 +378,26 @@ images, and respects robots.txt, which all provide good security.
 
     def url_links(self):
         '''Generic webpage link finder format.'''
-        return [ a.get_attribute('href') \
-                 for a in self.session.find_elements_by_tag_name('a') \
-                 if a.get_attribute('href') is not None ]
+        try:
+            return [ a.get_attribute('href') \
+                     for a in self.session.find_elements_by_tag_name('a') \
+                     if a.get_attribute('href') is not None ]
+        except BaseException as e:
+            print(e)
+            return []
 
     def check_robots(self,url):
-        url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(path='/robots.txt',query='',params=''))
-        self.rp.set_url(url_robots)
-        self.rp.read()
-        return self.rp.can_fetch(self.user_agent,url)
+        result = False
+        try:
+            url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(path='/robots.txt',query='',params=''))
+            rp = RobotFileParserUserAgent()
+            rp.set_url(url_robots)
+            rp.read()
+            result = rp.can_fetch(self.user_agent,url)
+        except BaseException as e:
+            print(e)
+        del rp      # ensure self.close() in urllib
+        return result
 
     def add_url_links(self,links):
         k = 0
