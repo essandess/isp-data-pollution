@@ -246,9 +246,12 @@ images, and respects robots.txt, which all provide good security.
     def diurnal_cycle_test(self):
         now = dt.datetime.now()
         tmhr = now.hour + now.minute/60.
-        phase = npr.normal(12.,2.)
+        phase = npr.normal(14.,1.)
         exponent = min(0.667,self.chi2_mean_std(0.333,0.1))
-        diurn = np.power(max(0., 0.5*(1.+np.cos((tmhr-phase)*(2.*np.pi/24.)))), exponent)
+        def cospow(x,e):  # flattened cosine with e < 1
+            c = np.cos(x)
+            return np.sign(c) * np.power(np.abs(c), e)
+        diurn = max(0.,0.5*(1.+cospow((tmhr-phase)*(2.*np.pi/24.),exponent)))
         flr = min(0.1,self.chi2_mean_std(0.02,0.002))
         val = flr + (1.-flr)*diurn
         return npr.uniform() < val
@@ -429,7 +432,7 @@ images, and respects robots.txt, which all provide good security.
     class TimeoutError(Exception):
         pass
 
-    def phantomjs_hang_handler(self):
+    def phantomjs_hang_handler(self, signum, frame):
         # https://github.com/detro/ghostdriver/issues/334
         # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
         print('Looks like phantomjs has hung.')
