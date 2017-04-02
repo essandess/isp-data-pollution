@@ -117,7 +117,6 @@ images, and respects robots.txt, which all provide good security.
         self.fake = Factory.create()
         self.hour_trigger = True
         self.twentyfour_hour_trigger = True
-        self.open_session()
         self.links = set()
         self.link_count = dict()
         self.start_time = time.time()
@@ -206,13 +205,18 @@ images, and respects robots.txt, which all provide good security.
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
     def pollute_forever(self):
+        self.open_session()
         self.seed_links()
+        self.quit_session()
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
                 if self.diurnal_cycle_test():
+                    self.open_session()
                     self.pollute()
+                    self.quit_session()
                 else:
                     time.sleep(self.chi2_mean_std(3.,1.))
+                if npr.uniform() < 0.02: self.set_user_agent()  # reset the user agent occasionally
                 self.elapsed_time = time.time() - self.start_time
                 self.exceeded_bandwidth_tasks()
                 self.every_hour_tasks()
@@ -242,8 +246,8 @@ images, and respects robots.txt, which all provide good security.
     def diurnal_cycle_test(self):
         now = dt.datetime.now()
         tmhr = now.hour + now.minute/60.
-        phase = self.chi2_mean_std(12.,2.)
-        exponent = min(0.75,self.chi2_mean_std(0.5,0.05))
+        phase = npr.normal(12.,2.)
+        exponent = min(0.667,self.chi2_mean_std(0.333,0.1))
         diurn = np.power(max(0., 0.5*(1.+np.cos((tmhr-phase)*(2.*np.pi/24.)))), exponent)
         flr = min(0.1,self.chi2_mean_std(0.02,0.002))
         val = flr + (1.-flr)*diurn
@@ -288,6 +292,10 @@ images, and respects robots.txt, which all provide good security.
                     # restart the session
                     self.quit_session()
                     self.open_session()
+                else:
+                    self.open_session()
+                    self.seed_links()
+                    self.quit_session()
                 self.twentyfour_hour_trigger = False
         else:
             self.twentyfour_hour_trigger = True
