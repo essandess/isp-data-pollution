@@ -84,7 +84,7 @@ accomplishes this.
 
 If everyone uses all the data they've paid for to pollute their
 browsing history, then perhaps ISPs will reconsider the business model
-of selling customer's private browsing history.
+of selling customers' private browsing history.
 
 The alternative of using a VPN or Tor merely pushes the issue onto to
 the choice of VPN provider, complicates networking, and adds the
