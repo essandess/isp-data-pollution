@@ -48,7 +48,7 @@ The screenshot of a randomly crawled web page looks like this. Note that there a
 This is what was necessary on macOS:
 
 ```
-sudo port install selenenium phantomjs
+sudo port install selenium phantomjs
 sudo -H pip-3.4 install selenium
 
 # if phantonjs fails to build because of an Xode configuration error: test with
