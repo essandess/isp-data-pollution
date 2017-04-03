@@ -51,7 +51,7 @@ blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
 
 # fix via override the read class method in RobotFileParser
-# many sites ill block access to robots.txt without a standard User-Agent header
+# many sites will block access to robots.txt without a standard User-Agent header
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
     def read(self):
         """Reads the robots.txt URL and feeds it to the parser."""
