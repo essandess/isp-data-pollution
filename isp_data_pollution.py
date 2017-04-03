@@ -135,7 +135,7 @@ images, and respects robots.txt, which all provide good security.
             # https://coderwall.com/p/9jgaeq/set-phantomjs-user-agent-string
             # http://phantomjs.org/api/webpage/property/settings.html
             dcap = dict(DesiredCapabilities.PHANTOMJS)
-            dcap['browserName'] = 'Chrome'
+            # dcap['browserName'] = 'Chrome'
             dcap['phantomjs.page.settings.userAgent'] = ( self.user_agent )
             dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
             dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
@@ -191,6 +191,8 @@ images, and respects robots.txt, which all provide good security.
             print(e)
         # ignore reductive subgraphs too
         self.blacklist_domains |= { 'wikipedia.org', 'wiktionary.org', 'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com' }  # wiki, startpage-specific
+        # and observed problem urls
+        self.blacklist_urls |= { 'about:blank' }
 
     def get_random_words(self):
         try:
@@ -375,7 +377,6 @@ images, and respects robots.txt, which all provide good security.
 
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
-        if not self.check_robots(url): return  # bail out if robots.txt says to
         signal.alarm(20)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
@@ -414,7 +415,9 @@ images, and respects robots.txt, which all provide good security.
         k = 0
         for link in sorted(links,key=lambda k: random.random()):
             lp = uprs.urlparse(link)
-            if (lp.scheme == 'http' or lp.scheme == 'https') and not self.blacklisted(link):
+            if (lp.scheme == 'http' or lp.scheme == 'https') \
+                    and not self.blacklisted(link) \
+                    and self.check_robots(link):  # decorrelate robots.txt GET from url GET
                 if self.add_link(link): k += 1
                 if k > self.max_links_per_page: break
         if self.debug: print('Added {:d} links, {:d} total at url \'{}\'.'.format(k,len(self.links),self.session.current_url))
