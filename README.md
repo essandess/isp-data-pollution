@@ -57,6 +57,25 @@ The screenshot of a randomly crawled web page looks like this. Note that there a
 
 # Installation
 
+Depending upon your Python (v. 3) installation, the module dependencies are `numpy`, `requests`, `selenium`, and `Faker`, as well as `phantomjs`. How you install these depends upon your OS.
+
+This involves choosing a Python (v. 3) package manager, typically `pip` or `Anaconda`.
+
+I like `pip`, so on my machines I would say:
+
+```
+sudo pip-3.4 install numpy requests selenium Faker
+```
+
+I also like MacPorts for native builds, so I might also use:
+
+```
+sudo port install py34-numpy py34-requests phantomjs
+```
+
+Figure out how to install these libraries on your OS, and the script will run.
+
+
 This is what was necessary on macOS:
 
 ```
