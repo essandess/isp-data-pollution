@@ -320,8 +320,9 @@ images, and respects robots.txt, which all provide good security.
 
     def remove_link(self):
         url = random.sample(self.links,1)[0];
-        self.links.remove(url)  # pop a random item from the stack
-        self.decrement_link_count(url)
+        if npr.uniform() < 0.95:  # 95% 1 GET, ~5% 2 GETs, .2% three GETs
+            self.links.remove(url)  # pop a random item from the stack
+            self.decrement_link_count(url)
         return url
 
     def add_link(self,url):
@@ -377,6 +378,7 @@ images, and respects robots.txt, which all provide good security.
 
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
+        if not self.check_robots(url): return  # bail out if robots.txt says to
         signal.alarm(20)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
@@ -401,7 +403,7 @@ images, and respects robots.txt, which all provide good security.
     def check_robots(self,url):
         result = False
         try:
-            url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(path='/robots.txt',query='',params=''))
+            url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(scheme='https',path='/robots.txt',query='',params=''))
             rp = RobotFileParserUserAgent()
             rp.set_url(url_robots)
             rp.read()
@@ -415,9 +417,7 @@ images, and respects robots.txt, which all provide good security.
         k = 0
         for link in sorted(links,key=lambda k: random.random()):
             lp = uprs.urlparse(link)
-            if (lp.scheme == 'http' or lp.scheme == 'https') \
-                    and not self.blacklisted(link) \
-                    and self.check_robots(link):  # decorrelate robots.txt GET from url GET
+            if (lp.scheme == 'http' or lp.scheme == 'https') and not self.blacklisted(link):
                 if self.add_link(link): k += 1
                 if k > self.max_links_per_page: break
         if self.debug: print('Added {:d} links, {:d} total at url \'{}\'.'.format(k,len(self.links),self.session.current_url))
