@@ -27,8 +27,8 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from io import BytesIO
 from faker import Factory
 
-# nice this process
-os.nice(15)
+# nice this process on UNIX
+if hasattr(os,'nice'): os.nice(15)
 
 gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
@@ -51,7 +51,7 @@ blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
 
 # fix via override the read class method in RobotFileParser
-# many sites will block access to robots.txt without a standard User-Agent header
+# many sites ill block access to robots.txt without a standard User-Agent header
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
     def read(self):
         """Reads the robots.txt URL and feeds it to the parser."""
@@ -84,7 +84,7 @@ accomplishes this.
 
 If everyone uses all the data they've paid for to pollute their
 browsing history, then perhaps ISPs will reconsider the business model
-of selling customers' private browsing history.
+of selling customer's private browsing history.
 
 The alternative of using a VPN or Tor merely pushes the issue onto to
 the choice of VPN provider, complicates networking, and adds the
