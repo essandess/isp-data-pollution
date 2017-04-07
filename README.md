@@ -38,7 +38,7 @@ The equation above asserts that (200-1)×100 or about twenty thousand (20,000) n
 
 This amounts to one noise call about every five seconds, which is very easy to achieve in practice, and easily falls within a nominal bandwidth limit of 50 GB per month.
 
-If Ye et al.'s client-side information theoretic model is valid in practice, then it is reasonable to expect that the parameters chosen in this script would be able to greatly reduce or elliminate the mutual information between actual user domain data and the domain data presented to the ISP.
+If Ye et al.'s client-side information theoretic model is valid in practice, then it is reasonable to expect that the parameters chosen in this script would be able to greatly reduce or eliminate the mutual information between actual user domain data and the domain data presented to the ISP.
 
 Furthermore, fewer noise calls may be used if a dependency model is introduced between the user and noise distributions.
 
