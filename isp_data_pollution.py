@@ -50,6 +50,30 @@ blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 # tell my ISP that I use a really awful browser, along with random user agents (below)
 user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
 
+# bias the content with non-random, diverse, link-heavy, popular content
+seed_bias_links = ['http://my.xfinity.com/news',
+                    'http://my.xfinity.com/entertainment',
+                    'http://my.xfinity.com/shopping',
+                    'http://www.cnbc.com/',
+                    'https://news.google.com',
+                    'https://news.yahoo.com',
+                    'http://www.huffingtonpost.com',
+                    'http://www.cnn.com',
+                    'http://www.foxnews.com',
+                    'http://www.nbcnews.com',
+                    'http://www.usatoday.com',
+                    'http://www.huffingtonpost.com',
+                    'http://www.tmz.com',
+                    'http://www.deadspin.com',
+                    'http://www.dailycaller.com',
+                    'http://www.sports.yahoo.com',
+                    'http://www.espn.com',
+                    'http://www.foxsports.com',
+                    'http://www.finance.yahoo.com',
+                    'http://www.money.msn.com',
+                    'http://www.fool.com'
+                    ]
+
 # fix via override the read class method in RobotFileParser
 # many sites will block access to robots.txt without a standard User-Agent header
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
@@ -103,6 +127,7 @@ images, and respects robots.txt, which all provide good security.
                  search_url=search_url,
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
+                 seed_bias_links=seed_bias_links,
                  debug=False):
         self.gb_per_month = gb_per_month
         self.max_links_cached = max_links_cached
@@ -112,6 +137,7 @@ images, and respects robots.txt, which all provide good security.
         self.search_url = search_url
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
+        self.seed_bias_links = seed_bias_links
         self.debug = debug
         signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         self.fake = Factory.create()
@@ -232,12 +258,8 @@ images, and respects robots.txt, which all provide good security.
         self.get_url(url)
 
     def seed_links(self):
-        # initialize link-heavy, with ISP-oriented content
-        self.links |= set( ['http://my.xfinity.com/news',
-                           'http://my.xfinity.com/entertainment',
-                           'http://my.xfinity.com/shopping',
-                           'http://www.cnbc.com/',
-                           'https://www.yahoo.com'] )
+        # bias with non-random seed links
+        self.links |= set(self.seed_bias_links)
         if len(self.links) < self.max_links_cached:
             num_words = max(1,int(np.round(npr.poisson(1)+0.5)))  # mean of 1.5 words per search
             word = ' '.join(random.sample(self.words,num_words))
@@ -364,7 +386,7 @@ images, and respects robots.txt, which all provide good security.
             signal.alarm(0)  # cancel the alarm
         self.data_usage += len(self.session.page_source)
         new_links = self.websearch_links()
-        if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
+        if len(self.links) < self.max_links_cached: self.add_url_links(new_links,url)
 
     def websearch_links(self):
         '''Webpage format for a popular search engine, <div class="g">'''
@@ -388,7 +410,7 @@ images, and respects robots.txt, which all provide good security.
             signal.alarm(0)  # cancel the alarm
         self.data_usage += len(self.session.page_source)
         new_links = self.url_links()
-        if len(self.links) < self.max_links_cached: self.add_url_links(new_links)
+        if len(self.links) < self.max_links_cached: self.add_url_links(new_links,url)
 
     def url_links(self):
         '''Generic webpage link finder format.'''
@@ -413,14 +435,22 @@ images, and respects robots.txt, which all provide good security.
         del rp      # ensure self.close() in urllib
         return result
 
-    def add_url_links(self,links):
+    def add_url_links(self,links,url=''):
         k = 0
         for link in sorted(links,key=lambda k: random.random()):
             lp = uprs.urlparse(link)
             if (lp.scheme == 'http' or lp.scheme == 'https') and not self.blacklisted(link):
                 if self.add_link(link): k += 1
                 if k > self.max_links_per_page: break
-        if self.debug: print('Added {:d} links, {:d} total at url \'{}\'.'.format(k,len(self.links),self.session.current_url))
+        if self.debug:
+            current_url = url  # default
+            try:
+                current_url = self.session.current_url
+                # the current_url method breaks on a lot of sites, e.g.
+                # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
+            except BaseException as e:
+                print(e)
+            print('Added {:d} links, {:d} total at url \'{}\'.'.format(k,len(self.links),current_url))
 
     def blacklisted(self,link):
         return link in self.blacklist_urls or self.domain_name(link) in self.blacklist_domains
