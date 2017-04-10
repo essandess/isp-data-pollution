@@ -20,7 +20,7 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, sys, tarfile, time
+import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -263,7 +263,7 @@ images, and respects robots.txt, which all provide good security.
         if len(self.links) < self.max_links_cached:
             num_words = max(1,int(np.round(npr.poisson(1)+0.5)))  # mean of 1.5 words per search
             word = ' '.join(random.sample(self.words,num_words))
-            if self.debug: print('Seeding with search for \'{}\'...'.format(word))
+            if self.debug: print('Seeding with search for \'{}\'…'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
             self.get_websearch(word)
 
@@ -357,7 +357,7 @@ images, and respects robots.txt, which all provide good security.
             self.links.add(url)
             self.increment_link_count(url,domain)
             result = True
-            # if self.debug: print('\tAdded link \'{}\'...'.format(url))
+            # if self.debug: print('\tAdded link \'{}\'…'.format(url))
         return result
 
     def decrement_link_count(self,url,domain=None):
