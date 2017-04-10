@@ -20,7 +20,7 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, tarfile, time
+import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, sys, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -74,7 +74,7 @@ seed_bias_links = ['http://my.xfinity.com/news',
                     'http://www.fool.com'
                     ]
 
-# fix via override the read class method in RobotFileParser
+# monkey patch the read class method in RobotFileParser
 # many sites will block access to robots.txt without a standard User-Agent header
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
     def read(self):
@@ -128,7 +128,7 @@ images, and respects robots.txt, which all provide good security.
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
-                 debug=False):
+                 blacklist=True,verbose=True,debug=False):
         self.gb_per_month = gb_per_month
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
@@ -138,7 +138,7 @@ images, and respects robots.txt, which all provide good security.
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
         self.seed_bias_links = seed_bias_links
-        self.debug = debug
+        self.blacklist = blacklist; self.verbose = verbose; self.debug = debug
         signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         self.fake = Factory.create()
         self.hour_trigger = True
@@ -180,8 +180,8 @@ images, and respects robots.txt, which all provide good security.
         self.blacklist_domains = set()
         self.blacklist_urls = set()
         try:
-            if True:    # download the blacklist or not
-                print('Downloading the blacklist...')
+            if self.blacklist:    # download the blacklist or not
+                if self.debug: print('Downloading the blacklist… ',end='',flush=True)
             else:
                 raise Exception('Skip downloading the blacklist.')
             # http://stackoverflow.com/questions/18623842/read-contents-tarfile-into-python-seeking-backwards-is-not-allowed
@@ -212,9 +212,9 @@ images, and respects robots.txt, which all provide good security.
                 self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
             tgz.close()
             tmpfile.close()
-            print('done.')
+            if self.debug: print('done.',flush=True)
         except BaseException as e:
-            print(e)
+            if self.debug: print(e)
         # ignore reductive subgraphs too
         self.blacklist_domains |= { 'wikipedia.org', 'wiktionary.org', 'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com' }  # wiki, startpage-specific
         # and observed problem urls
@@ -228,7 +228,7 @@ images, and respects robots.txt, which all provide good security.
             self.words = response.content.decode('utf-8').splitlines()
             reqsession.close()
         except BaseException as e:
-            print(e)
+            if self.debug: print(e)
             self.words = [ 'FUBAR' ]
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
@@ -250,7 +250,7 @@ images, and respects robots.txt, which all provide good security.
                 self.every_hour_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
             except BaseException as e:
-                print(e)
+                if self.debug: print(e)
 
     def pollute(self):
         if len(self.links) < 2000: self.seed_links()
@@ -381,7 +381,7 @@ images, and respects robots.txt, which all provide good security.
         try:
             self.session.get(url)  # selenium driver
         except self.TimeoutError as e:
-            print(e)
+            if self.debug: print(e)
         finally:
             signal.alarm(0)  # cancel the alarm
         self.data_usage += len(self.session.page_source)
@@ -395,7 +395,7 @@ images, and respects robots.txt, which all provide good security.
                 for div in self.session.find_elements_by_css_selector('div.g') \
                      if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
         except BaseException as e:
-            print(e)
+            if self.debug: print(e)
             return []
 
     def get_url(self,url):
@@ -405,7 +405,7 @@ images, and respects robots.txt, which all provide good security.
         try:
             self.session.get(url)  # selenium driver
         except self.TimeoutError as e:
-            print(e)
+            if self.debug: print(e)
         finally:
             signal.alarm(0)  # cancel the alarm
         self.data_usage += len(self.session.page_source)
@@ -431,7 +431,7 @@ images, and respects robots.txt, which all provide good security.
             rp.read()
             result = rp.can_fetch(self.user_agent,url)
         except BaseException as e:
-            print(e)
+            if self.debug: print(e)
         del rp      # ensure self.close() in urllib
         return result
 
@@ -442,15 +442,27 @@ images, and respects robots.txt, which all provide good security.
             if (lp.scheme == 'http' or lp.scheme == 'https') and not self.blacklisted(link):
                 if self.add_link(link): k += 1
                 if k > self.max_links_per_page: break
-        if self.debug:
+        if self.verbose:
             current_url = url  # default
             try:
                 current_url = self.session.current_url
                 # the current_url method breaks on a lot of sites, e.g.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
             except BaseException as e:
-                print(e)
-            print('Added {:d} links, {:d} total at url \'{}\'.'.format(k,len(self.links),current_url))
+                if self.debug: print(e)
+            self.print_progress(k,current_url)
+
+    def print_progress(self,num_links,url,terminal_width=80):
+        # truncate or fill with white space
+        text_suffix = ': {:d} links added, {:d} total'.format(num_links,len(self.links))
+        chars_used =  2 + len(text_suffix)
+        if len(url) + chars_used > terminal_width:
+            url = url[:terminal_width-chars_used-1] + '…'
+        text = "'{}'{}".format(url,text_suffix)
+        text = text[:min(terminal_width,len(text))] + ' ' * max(0,terminal_width-len(text))
+        print(text,end='',flush=True)
+        time.sleep(0.01)
+        print('\r',end='',flush=True)
 
     def blacklisted(self,link):
         return link in self.blacklist_urls or self.domain_name(link) in self.blacklist_domains
@@ -477,37 +489,5 @@ images, and respects robots.txt, which all provide good security.
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
 
-    # original requests-based code fragments
-    # def get_url(self,url):
-    #     '''HTTP GET of the url, and add any embedded links.'''
-    #     if self.check_size_and_set_mimetype(url) and self.mimetype == 'text/html':
-    #         self.data_usage += self.content_length
-    #         try:
-    #             if self.check_robots(url):
-    #                 response = self.session.get(url,allow_redirects=True,timeout=10)
-    #                 if len(self.links) < self.max_links_cached: self.add_url_links(response.content.decode('utf-8'))
-    #         except BaseException as e:
-    #             print(e)
-
-    # no HTTP HEAD support in phantomjs
-    # def check_size_and_set_mimetype(self,url,maximum=1048576):
-    #     '''Return True if not too large, set the mimetype as well.'''
-    #     self.mimetype = None
-    #     self.mimetype_options = None
-    #     self.content_length = 0
-    #     try:
-    #         resp = self.session.head(url,allow_redirects=True,timeout=10)
-    #         resp.raise_for_status()
-    #         if 'Content-Type' in resp.headers:
-    #             self.mimetype, self.mimetype_options = cgi.parse_header(resp.headers['Content-Type'])
-    #         if 'Content-Length' in resp.headers:
-    #             self.content_length = int(resp.headers['Content-Length'])
-    #             if self.content_length > maximum:
-    #                 raise Exception('Warning: Content size {:d} too large at url \'{}\'.'.format(int(resp.headers['Content-Length']),url))
-    #     except BaseException as e:
-    #         print(e)
-    #         return False
-    #     return True
-
 if __name__ == "__main__":
-    ISPDataPollution(debug=True)
+    ISPDataPollution(blacklist=True,verbose=True)
