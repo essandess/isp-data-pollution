@@ -419,7 +419,7 @@ images, and respects robots.txt, which all provide good security.
                      for a in self.session.find_elements_by_tag_name('a') \
                      if a.get_attribute('href') is not None ]
         except BaseException as e:
-            print(e)
+            if self.debug: print(e)
             return []
 
     def check_robots(self,url):
@@ -480,12 +480,12 @@ images, and respects robots.txt, which all provide good security.
     def phantomjs_hang_handler(self, signum, frame):
         # https://github.com/detro/ghostdriver/issues/334
         # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
-        print('Looks like phantomjs has hung.')
+        if self.debug: print('Looks like phantomjs has hung.')
         try:
             self.quit_session()
             self.open_session()
         except BaseException as e:
-            print(e)
+            if self.debug: print(e)
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
 
