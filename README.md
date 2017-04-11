@@ -124,3 +124,13 @@ sudo -H pip-3.4 install selenium
 cd /Applications/Xcode.app/Contents/Developer/usr/bin/
 sudo ln -s xcodebuild xcrun
 ```
+
+# Installation through virtualenv
+
+In order to isolate pip library files, virtualenv is convenient. If you prefer this method, you can follow the steps below:
+```
+pushd ~/.virtualenv/ && virtualenv -p python3 isp-pollute && popd
+workon isp-pollute
+pip install numpy requests selenium Faker
+sudo apt-get install phantomjs
+```
