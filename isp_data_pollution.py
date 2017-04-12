@@ -30,6 +30,13 @@ from faker import Factory
 # nice this process on UNIX
 if hasattr(os,'nice'): os.nice(15)
 
+try:
+    from pyvirtualdisplay import Display
+    display = Display(visible=0, size=(1296,1018))
+    display.start()
+except ImportError:
+    pass
+
 gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
 max_links_per_page = 200	# Maximum number of links to add per page
