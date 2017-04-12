@@ -154,6 +154,14 @@ cd /Applications/Xcode.app/Contents/Developer/usr/bin/
 sudo ln -s xcodebuild xcrun
 ```
 
+# Running on a headless computer (a computer a graphical interface)
+phantomjs requires some graphical software, virtual or otherwise, so on a headless computer, you'll need the following system package and local package.
+If you're not using virtualenv (below) then run pip as sudo.
+```
+sudo apt-get install xvfb
+pip install pyvirtualdisplay
+```
+
 # Installation through virtualenv
 
 In order to isolate pip library files, virtualenv is convenient. If you prefer this method, you can follow the steps below:
