@@ -64,6 +64,25 @@ Host: www.bananarepublic.com
 Connection: keep-alive
 ```
 
+# Known Issues
+
+Both Kaveh Waddell's and Josh Brodkin's excellent articles on ISP privacy in *[The Atlantic](https://www.theatlantic.com/technology/archive/2017/04/hiding-the-signal-in-the-noise/522564/)* and *[Ars Technica](https://arstechnica.com/information-technology/2017/04/after-vote-to-kill-privacy-rules-users-try-to-pollute-their-web-history/)* address important critiques of this approach. These are summarized here along with a response both so that users are aware of these issues, and to prompt suggestions to address them.
+
+- **“Masking a person’s browsing history by layering in copies of other people’s browsing patterns might be more useful. … ‘It would be a Tor-like system where anonymity comes through shared usage.’”** [[Bruce Schneier](https://www.schneier.com)]
+  - Comment 1: It is possible to mask privacy with statistical methods (Rubin, op. cit.; Ye et al., op. cit.)
+  - Comment 2: A Tor- or I2P-like routing system would be preferable if a good solution to the Tor exit-node problem is found. A sample crawl illustrates that creating self-generated pollution is much, much safer than running a Tor (or Tor-like) exit node that allows anyone to send open requests from a personal IP address.
+
+- **“[Do not underestimate] internet providers’ ability … to see through data-obfuscation tactics.”** [[Bruce Schneier](https://www.schneier.com)]
+  - The bandwidth parameters in this repo are chosen with a specific information theoretic model in mind that, if correct, eliminates the mutual information between user domain data and polluted data presented to the ISP. No mutual information means no big data exploitation opportunity. This is an area where more research is required because flaws/imperfections in the obfuscation method will leak information. Sufficient quantities of correctly chosen noise make big data approaches significantly more challenging. This is a hypothesis that remains to be tested in this context.
+
+- **“Random Google searches could send the program down a dark rabbit hole, without the user’s knowledge.”** [[Kenn White](https://twitter.com/kennwhite)]
+  - Comment 1: This is a possibility. It is mitigated by (1) using Google safe searches; (2) an in-memory blacklist; (3) no image downloads. Based on this critique, the explicit parameter `safe=active` is added to search queries.
+  - Comment 2: Tor exit-node traffic almost certainly contains such traffic, but I have not observed this potential issue. Reports of such problems or suggestions to further mitigate them are welcomed in the repo's [Issues](../../Issues).
+  
+- **“Some information is sensitive even if it's surrounded by noise. … Imagine if hackers targeted your ISP, your browsing history was leaked, and it showed you visiting specific controversial websites. … Even if that was surrounded by noise, it would be very hard to get the sort of noise that would give you plausible deniability.”** [[Jeremy Gillula](https://www.eff.org/about/staff/jeremy-gillula)]
+  - Comment 1: This is correct. Obfuscation is a statistical approach that connect conceal highly specific, personal, sensitive data.
+  - Comment 2: This is also a potential issue for VPN users.
+
 # Example crawl
 
 A fews seconds of random crawling looks like this:
