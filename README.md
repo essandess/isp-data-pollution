@@ -80,7 +80,7 @@ Both Kaveh Waddell's and Josh Brodkin's excellent articles on ISP privacy in *[T
   - Comment 2: Tor exit-node traffic almost certainly contains such traffic, but I have not observed this potential issue. Reports of such problems or suggestions to further mitigate them are welcomed in the repo's [Issues](../../Issues).
   
 - **“Some information is sensitive even if it's surrounded by noise. … Imagine if hackers targeted your ISP, your browsing history was leaked, and it showed you visiting specific controversial websites. … Even if that was surrounded by noise, it would be very hard to get the sort of noise that would give you plausible deniability.”** [[Jeremy Gillula](https://www.eff.org/about/staff/jeremy-gillula)]
-  - Comment 1: This is correct. Obfuscation is a statistical approach that connect conceal highly specific, personal, sensitive data.
+  - Comment 1: This is correct. Obfuscation is a statistical approach that cannot conceal highly specific, personal, sensitive data, and would not offer plausible deniability.
   - Comment 2: This is also a potential issue for VPN users.
 
 # Example crawl
