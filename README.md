@@ -48,22 +48,6 @@ Unencrypted HTTP calls leak highly specific user data to the ISP. Targeted adver
 
 Furthermore, the advertiser's transmission bandwidth is highly constrained—only so many ads will fit on a web page. Adding uncorrelated noise calls complicates the problem of selecting the appropriate ad.
 
-# Privatizing Proxy Filter with VPN Access
-
-Data pollution is one component of privatizing your personal data. Install the [EFF](../../../../EFForg)'s [HTTPS Everywhere](https://www.eff.org/https-everywhere) and [Privacy Badger](https://www.eff.org/privacybadger) on **all** browsers. Also see the repos [osxfortress](../../../osxfortress) and [osx-openvpn-server](../../../osx-openvpn-server) to block advertising, trackers, and malware across devices.
-
-Using a [privatizing proxy](../../../osxfortress) to pool your own personal traffic with the data pollution traffic adds another layer of obfuscation with header traffic control. HTTP headers from the polluted traffic appear as:
-
-```
-GET /products/mens-suits.jsp HTTP/1.1
-Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
-User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko
-Accept-Encoding: gzip, deflate
-Accept-Language: en-US,*
-Host: www.bananarepublic.com
-Connection: keep-alive
-```
-
 # Known Issues
 
 Both Kaveh Waddell's and Josh Brodkin's excellent articles on ISP privacy in *[The Atlantic](https://www.theatlantic.com/technology/archive/2017/04/hiding-the-signal-in-the-noise/522564/)* and *[Ars Technica](https://arstechnica.com/information-technology/2017/04/after-vote-to-kill-privacy-rules-users-try-to-pollute-their-web-history/)* address important critiques of this approach. These are summarized here along with a response both so that users are aware of these issues, and to prompt suggestions to address them.
@@ -82,6 +66,26 @@ Both Kaveh Waddell's and Josh Brodkin's excellent articles on ISP privacy in *[T
 - **“Some information is sensitive even if it's surrounded by noise. … Imagine if hackers targeted your ISP, your browsing history was leaked, and it showed you visiting specific controversial websites. … Even if that was surrounded by noise, it would be very hard to get the sort of noise that would give you plausible deniability.”** [[Jeremy Gillula](https://www.eff.org/about/staff/jeremy-gillula)]
   - Comment 1: This is correct. Obfuscation is a statistical approach that cannot conceal highly specific, personal, sensitive data, and would not offer plausible deniability.
   - Comment 2: This is also a potential issue for VPN users.
+
+Analysis of other data obfuscation approaches show susceptibility to off-the-shelf machine learning classifer attacks: Pedinti and Saxena demonstrated meaningful user classification with the TrackMeNot browser plugin intended to defeat an adversarial search engine ("On the Privacy of Web Search Based on Query Obfuscation: A Case Study of TrackMeNot"). The adversarial model and training methods used in this analysis are not directly applicable to the case of ISP intermediaries. Key features of Pedinti and Saxena's attack are:
+
+- "In our *adversarial model*, we assumed that the search engine is adversarial and its goal is to distinguish between TMN and user queries for profiling and aggregation purposes. We also assumed that the engine would have access to user’s search histories for a certain duration until the point the user starts using the TMN software."
+
+# Privatizing Proxy Filter with VPN Access
+
+Data pollution is one component of privatizing your personal data. Install the [EFF](../../../../EFForg)'s [HTTPS Everywhere](https://www.eff.org/https-everywhere) and [Privacy Badger](https://www.eff.org/privacybadger) on **all** browsers. Also see the repos [osxfortress](../../../osxfortress) and [osx-openvpn-server](../../../osx-openvpn-server) to block advertising, trackers, and malware across devices.
+
+Using a [privatizing proxy](../../../osxfortress) to pool your own personal traffic with the data pollution traffic adds another layer of obfuscation with header traffic control. HTTP headers from the polluted traffic appear as:
+
+```
+GET /products/mens-suits.jsp HTTP/1.1
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+User-Agent: Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko
+Accept-Encoding: gzip, deflate
+Accept-Language: en-US,*
+Host: www.bananarepublic.com
+Connection: keep-alive
+```
 
 # Example crawl
 
