@@ -375,7 +375,7 @@ images, and respects robots.txt, which all provide good security.
 
     def get_websearch(self,query):
         '''HTTP GET of a websearch, then add any embedded links.'''
-        url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}'.format(query)))
+        url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
         # return self.session.get(url)
         signal.alarm(20)  # set an alarm
         try:
