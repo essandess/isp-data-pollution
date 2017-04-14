@@ -20,22 +20,23 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, tarfile, time
+import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from io import BytesIO
 from faker import Factory
 
-# nice this process on UNIX
-if hasattr(os,'nice'): os.nice(15)
-
+# headless Raspberry Pi
 try:
     from pyvirtualdisplay import Display
     display = Display(visible=0, size=(1296,1018))
     display.start()
 except ImportError:
     pass
+
+# nice this process on UNIX
+if hasattr(os,'nice'): os.nice(15)
 
 gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
@@ -81,7 +82,7 @@ seed_bias_links = ['http://my.xfinity.com/news',
                     'http://www.fool.com'
                     ]
 
-# monkey patch the read class method in RobotFileParser
+# monkeypatch the read class method in RobotFileParser
 # many sites will block access to robots.txt without a standard User-Agent header
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
     def read(self):
@@ -135,8 +136,7 @@ images, and respects robots.txt, which all provide good security.
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
-                 blacklist=True,verbose=True,debug=False):
-        self.gb_per_month = gb_per_month
+                 blacklist=True,verbose=True):
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
         self.max_links_per_domain = max_links_per_domain
@@ -145,7 +145,10 @@ images, and respects robots.txt, which all provide good security.
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
         self.seed_bias_links = seed_bias_links
-        self.blacklist = blacklist; self.verbose = verbose; self.debug = debug
+        self.blacklist = blacklist; self.verbose = verbose;
+        # self.gb_per_month = gb_per_month  # set in parseArgs
+        # self.debug = debug  # set in parseArgs
+        self.args = self.args = self.parseArgs()
         signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         self.fake = Factory.create()
         self.hour_trigger = True
@@ -157,6 +160,18 @@ images, and respects robots.txt, which all provide good security.
         self.get_blacklist()
         self.get_random_words()
         self.pollute_forever()
+
+    def parseArgs(self):
+        parser = ap.ArgumentParser()
+        parser.add_argument('-bw', '--gb_per_month', help="GB per month", type=int, default=gb_per_month)
+        parser.add_argument('-g', '--debug', help="Debug flag", action='store_true')
+        args = parser.parse_args()
+        for k in args.__dict__: setattr(self,k,getattr(args,k))
+        self.sanity_check_arguments()
+        return args
+
+    def sanity_check_arguments(self):
+        self.gb_per_month = min(2048,max(1,self.gb_per_month))  # min-max bandwidth limits
 
     def open_session(self):
         if not hasattr(self, 'session') or not isinstance(self.session, requests.sessions.Session):
@@ -449,7 +464,7 @@ images, and respects robots.txt, which all provide good security.
             if (lp.scheme == 'http' or lp.scheme == 'https') and not self.blacklisted(link):
                 if self.add_link(link): k += 1
                 if k > self.max_links_per_page: break
-        if self.verbose:
+        if self.verbose or self.debug:
             current_url = url  # default
             try:
                 current_url = self.session.current_url
@@ -457,6 +472,9 @@ images, and respects robots.txt, which all provide good security.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
             except BaseException as e:
                 if self.debug: print(e)
+        if self.debug:
+            print("'{}': {:d} links added, {:d} total".format(current_url,k,len(self.links)))
+        elif self.verbose:
             self.print_progress(k,current_url)
 
     def print_progress(self,num_links,url,terminal_width=80):
@@ -497,4 +515,4 @@ images, and respects robots.txt, which all provide good security.
         raise self.TimeoutError('phantomjs is taking too long')
 
 if __name__ == "__main__":
-    ISPDataPollution(blacklist=True,verbose=True)
+    ISPDataPollution(blacklist=False)
