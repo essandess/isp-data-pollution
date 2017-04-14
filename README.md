@@ -70,7 +70,8 @@ Both Kaveh Waddell's and Josh Brodkin's excellent articles on ISP privacy in *[T
 
 - **“Random Google searches could send the program down a dark rabbit hole, without the user’s knowledge.”** [[Kenn White](https://twitter.com/kennwhite)]
   - Comment 1: This is a possibility. It is mitigated by (1) using Google safe searches; (2) an in-memory blacklist; (3) no image downloads. Based on this critique, the explicit parameter `safe=active` is added to search queries.
-  - Comment 2: Tor exit-node traffic almost certainly contains such traffic, but I have not observed this potential issue. Reports of such problems or suggestions to further mitigate them are welcomed in the repo's [Issues](../../Issues).
+  - Comment 2: Tor exit-node traffic almost certainly contains such traffic, which is an important issue for exit-node operators. In contrast, self-generated noise is likely to be—and in practice appears to be—much safer.
+  - Comment 3: This potential problem has not yet been observed or reported. Reports of such problems or suggestions to further mitigate them are welcomed in the repo's [Issues](../../Issues).
   
 - **“Some information is sensitive even if it's surrounded by noise. … Imagine if hackers targeted your ISP, your browsing history was leaked, and it showed you visiting specific controversial websites. … Even if that was surrounded by noise, it would be very hard to get the sort of noise that would give you plausible deniability.”** [[Jeremy Gillula](https://www.eff.org/about/staff/jeremy-gillula)]
   - Comment 1: This is correct. Obfuscation is a statistical approach that cannot conceal highly specific, personal, sensitive data, and would not offer plausible deniability.
