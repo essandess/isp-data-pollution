@@ -515,4 +515,4 @@ images, and respects robots.txt, which all provide good security.
         raise self.TimeoutError('phantomjs is taking too long')
 
 if __name__ == "__main__":
-    ISPDataPollution(blacklist=False)
+    ISPDataPollution()
