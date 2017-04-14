@@ -12,6 +12,15 @@ The [alternative](https://arstechnica.com/information-technology/2017/03/how-isp
 
 This crawler uses the Python selenium with phantomjs library, uses blacklists for undesirable websites (see the code for details), does not download images, and respects robots.txt, which all provide good security.
 
+# Command Line
+
+```
+python3 isp_data_pollution.py
+python3 isp_data_pollution.py --help
+python3 isp_data_pollution.py -bw 1024  # 1 TB per month
+python3 isp_data_pollution.py -g        # print debugging statements
+```
+
 # Motivation for Efficacy
 
 The approach used in this script is susceptible to both statistical attack and traffic anomalies. Josh Brodkin's [article](https://arstechnica.com/information-technology/2017/04/after-vote-to-kill-privacy-rules-users-try-to-pollute-their-web-history/) on privacy through noise injection covers several valid critiques: the approach is not guaranteed to obfuscate sensitive private information, and even if it does work initially, it may not scale. Known flaws and suggestions for improvements are welcomed in the [Issues](../../Issues) pages.
@@ -115,10 +124,6 @@ The screenshot of a randomly crawled web page looks like this. Note that there a
 `driver.get_screenshot_as_file('his_all_time_greatest_hits.png')`:
 
 ![His All Time Greatest Hits](his_all_time_greatest_hits.png)
-
-# Running
-
-`python3 isp_data_pollution.py`
 
 # Installation
 
