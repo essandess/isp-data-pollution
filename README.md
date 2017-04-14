@@ -59,6 +59,8 @@ Furthermore, the advertiser's transmission bandwidth is highly constrained—onl
 
 # Known Issues
 
+## Critiques of Data Pollution
+
 Both Kaveh Waddell's and Jon Brodkin's excellent articles on ISP privacy in *[The Atlantic](https://www.theatlantic.com/technology/archive/2017/04/hiding-the-signal-in-the-noise/522564/)* and *[Ars Technica](https://arstechnica.com/information-technology/2017/04/after-vote-to-kill-privacy-rules-users-try-to-pollute-their-web-history/)* address important critiques of this approach. These are summarized here along with a response both so that users are aware of these issues, and to prompt suggestions to address them.
 
 - **“Masking a person’s browsing history by layering in copies of other people’s browsing patterns might be more useful. … ‘It would be a Tor-like system where anonymity comes through shared usage.’”** [[Bruce Schneier](https://www.schneier.com)]
@@ -76,6 +78,8 @@ Both Kaveh Waddell's and Jon Brodkin's excellent articles on ISP privacy in *[Th
 - **“Some information is sensitive even if it's surrounded by noise. … Imagine if hackers targeted your ISP, your browsing history was leaked, and it showed you visiting specific controversial websites. … Even if that was surrounded by noise, it would be very hard to get the sort of noise that would give you plausible deniability.”** [[Jeremy Gillula](https://www.eff.org/about/staff/jeremy-gillula)]
   - Comment 1: This is correct. Obfuscation is a statistical approach that cannot conceal highly specific, personal, sensitive data, and would not offer plausible deniability.
   - Comment 2: This is also a potential issue for VPN users.
+
+## Known Limitations of Data Pollution
 
 Analysis of other data obfuscation approaches show susceptibility to off-the-shelf machine learning classifer attacks: Pedinti and Saxena demonstrated meaningful user classification with the TrackMeNot browser plugin intended to defeat an adversarial search engine ("[On the Privacy of Web Search Based on Query Obfuscation: A Case Study of TrackMeNot](http://link.springer.com/chapter/10.1007/978-3-642-14527-8_2)", in *Proc. PETS2010*, 2010). The adversarial model and training methods used in this analysis are not directly applicable to the case of ISP intermediaries. Key features of Pedinti and Saxena's attack are:
 
