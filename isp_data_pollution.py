@@ -548,10 +548,11 @@ images, and respects robots.txt, which all provide good security.
         try:
             if not hasattr(self,'session'): self.open_session()
             pid = self.session.service.process.pid
-            rss_MB = psutil.Process(pid).memory_info().rss/float(2**20)
-            if rss_MB > 1024:  # 1 GB rss limit
+            rss_mb = psutil.Process(pid).memory_info().rss/float(2**20)
+            if rss_mb > 1024:  # 1 GB rss limit
                 self.quit_session()
                 self.open_session()
+                pid = self.session.service.process.pid
             # check existence
             os.kill(pid, 0)
         except (OSError,BaseException) as e:
