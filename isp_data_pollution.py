@@ -255,9 +255,7 @@ images, and respects robots.txt, which all provide good security.
             if self.verbose: print('done.',flush=True)
         except BaseException as e:
             if self.verbose: print(e)
-        # ignore reductive subgraphs too
-        self.blacklist_domains |= { 'wikipedia.org', 'wiktionary.org', 'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com' }  # wiki, startpage-specific
-        # and observed problem urls
+        # ignore problem urls
         self.blacklist_urls |= { 'about:blank' }
 
     def get_random_words(self):
