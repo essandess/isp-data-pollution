@@ -20,7 +20,7 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, random, requests, signal, tarfile, time
+import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -136,6 +136,7 @@ images, and respects robots.txt, which all provide good security.
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
+                 quit_driver_every_call=False,
                  blacklist=True,verbose=True):
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
@@ -146,6 +147,7 @@ images, and respects robots.txt, which all provide good security.
         self.wordsite_url = wordsite_url
         self.seed_bias_links = seed_bias_links
         self.blacklist = blacklist; self.verbose = verbose;
+        self.quit_driver_every_call = quit_driver_every_call
         # self.gb_per_month = gb_per_month  # set in parseArgs
         # self.debug = debug  # set in parseArgs
         self.args = self.args = self.parseArgs()
@@ -174,36 +176,45 @@ images, and respects robots.txt, which all provide good security.
         self.gb_per_month = min(2048,max(1,self.gb_per_month))  # min-max bandwidth limits
 
     def open_session(self):
-        if not hasattr(self, 'session') or not isinstance(self.session, requests.sessions.Session):
-            # requests session-based code
-            # self.session = requests.Session()
-            # self.session.headers.update({'User-Agent': self.user_agent})
-            # use phantomjs
+        if not hasattr(self, 'session') or not isinstance(self.session,webdriver.phantomjs.webdriver.WebDriver):
+            # phantomjs session
             # http://engineering.shapesecurity.com/2015/01/detecting-phantomjs-based-visitors.html
             # https://coderwall.com/p/9jgaeq/set-phantomjs-user-agent-string
             # http://phantomjs.org/api/webpage/property/settings.html
+            # http://stackoverflow.com/questions/23390974/phantomjs-keeping-cache
             dcap = dict(DesiredCapabilities.PHANTOMJS)
             # dcap['browserName'] = 'Chrome'
             dcap['phantomjs.page.settings.userAgent'] = ( self.user_agent )
             dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
+            dcap['phantomjs.page.settings.clearMemoryCaches'] = ( 'true' )
             dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
-            driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=['--ignore-ssl-errors=true','--ssl-protocol=any'])
-            driver.set_window_size(1296,1018)   #Tor browser size on Linux
+            driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=['--disk-cache=false','--ignore-ssl-errors=true','--ssl-protocol=any'])
+            driver.set_window_size(1296,1018)   # Tor browser size on Linux
             driver.implicitly_wait(30)
             driver.set_page_load_timeout(30)
             self.session = driver
 
     def quit_session(self):
-        # self.session.close()  # quit closes all windows
-        self.session.quit()
-        del self.session
+        # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
+        if hasattr(self,'session'):
+            self.session.close()
+            self.session.service.process.send_signal(signal.SIGTERM)
+            self.session.quit()
+            del self.session
+
+    def clear_session(self):
+        # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
+        if hasattr(self, 'session'):
+            self.session.delete_all_cookies()
+            self.session.execute_script('window.localStorage.clear();')
+            self.session.execute_script('window.sessionStorage.clear();')
 
     def get_blacklist(self):
         self.blacklist_domains = set()
         self.blacklist_urls = set()
         try:
             if self.blacklist:    # download the blacklist or not
-                if self.debug: print('Downloading the blacklist… ',end='',flush=True)
+                if self.verbose: print('Downloading the blacklist… ',end='',flush=True)
             else:
                 raise Exception('Skip downloading the blacklist.')
             # http://stackoverflow.com/questions/18623842/read-contents-tarfile-into-python-seeking-backwards-is-not-allowed
@@ -234,9 +245,9 @@ images, and respects robots.txt, which all provide good security.
                 self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
             tgz.close()
             tmpfile.close()
-            if self.debug: print('done.',flush=True)
+            if self.verbose: print('done.',flush=True)
         except BaseException as e:
-            if self.debug: print(e)
+            if self.verbose: print(e)
         # ignore reductive subgraphs too
         self.blacklist_domains |= { 'wikipedia.org', 'wiktionary.org', 'startpage.com', 'startmail.com', 'ixquick.com', 'ixquick-proxy.com' }  # wiki, startpage-specific
         # and observed problem urls
@@ -257,16 +268,15 @@ images, and respects robots.txt, which all provide good security.
     def pollute_forever(self):
         self.open_session()
         self.seed_links()
-        self.quit_session()
+        self.clear_session()
+        if self.quit_driver_every_call: self.quit_session()
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
                 if self.diurnal_cycle_test():
-                    self.open_session()
                     self.pollute()
-                    self.quit_session()
                 else:
                     time.sleep(self.chi2_mean_std(3.,1.))
-                if npr.uniform() < 0.02: self.set_user_agent()  # reset the user agent occasionally
+                if npr.uniform() < 0.005: self.set_user_agent()  # reset the user agent occasionally
                 self.elapsed_time = time.time() - self.start_time
                 self.exceeded_bandwidth_tasks()
                 self.every_hour_tasks()
@@ -275,9 +285,17 @@ images, and respects robots.txt, which all provide good security.
                 if self.debug: print(e)
 
     def pollute(self):
-        if len(self.links) < 2000: self.seed_links()
+        if not self.quit_driver_every_call: self.check_phantomjs_process()
+        if len(self.links) < 2000:
+            if self.quit_driver_every_call: self.open_session()
+            self.seed_links()
+            self.clear_session()
+            if self.quit_driver_every_call: self.quit_session()
         url = self.remove_link()
+        if self.quit_driver_every_call: self.open_session()
         self.get_url(url)
+        self.clear_session()
+        if self.quit_driver_every_call: self.quit_session()
 
     def seed_links(self):
         # bias with non-random seed links
@@ -344,7 +362,7 @@ images, and respects robots.txt, which all provide good security.
                 else:
                     self.open_session()
                     self.seed_links()
-                    self.quit_session()
+                    if self.quit_driver_every_call: self.quit_session()
                 self.twentyfour_hour_trigger = False
         else:
             self.twentyfour_hour_trigger = True
@@ -361,9 +379,11 @@ images, and respects robots.txt, which all provide good security.
     def set_user_agent(self):
         global user_agent
         self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
+        if hasattr(self,'session'): self.quit_session()
+        self.open_session()
 
     def remove_link(self):
-        url = random.sample(self.links,1)[0];
+        url = random.sample(self.links,1)[0]
         if npr.uniform() < 0.95:  # 95% 1 GET, ~5% 2 GETs, .2% three GETs
             self.links.remove(url)  # pop a random item from the stack
             self.decrement_link_count(url)
@@ -513,6 +533,25 @@ images, and respects robots.txt, which all provide good security.
             if self.debug: print(e)
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
+
+    def check_phantomjs_process(self):
+        '''Check if phantomjs is running.'''
+        # Check rss and restart if too large, then check existence
+        # http://stackoverflow.com/questions/568271/how-to-check-if-there-exists-a-process-with-a-given-pid-in-python
+        try:
+            if not hasattr(self,'session'): self.open_session()
+            pid = self.session.service.process.pid
+            rss_MB = psutil.Process(pid).memory_info().rss/float(2**20)
+            if rss_MB > 1024:  # 1 GB rss limit
+                self.quit_session()
+                self.open_session()
+            # check existence
+            os.kill(pid, 0)
+        except (OSError,BaseException) as e:
+            if self.debug: print(e)
+            return False
+        else:
+            return True
 
 if __name__ == "__main__":
     ISPDataPollution()
