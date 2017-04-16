@@ -44,6 +44,7 @@ max_links_per_page = 200	# Maximum number of links to add per page
 max_links_per_domain = 400	# Maximum number of links to add per domain
 search_url = 'http://www.google.com/search'	# keep unencrypted for ISP DPI
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
+timeout = 20
 
 blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 # Usage of the Shalla Blacklists:
@@ -136,6 +137,7 @@ images, and respects robots.txt, which all provide good security.
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
+                 timeout=timeout,
                  quit_driver_every_call=False,
                  blacklist=True,verbose=True):
         self.max_links_cached = max_links_cached
@@ -146,7 +148,8 @@ images, and respects robots.txt, which all provide good security.
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
         self.seed_bias_links = seed_bias_links
-        self.blacklist = blacklist; self.verbose = verbose;
+        self.blacklist = blacklist; self.verbose = verbose
+        self.timeout = timeout
         self.quit_driver_every_call = quit_driver_every_call
         # self.gb_per_month = gb_per_month  # set in parseArgs
         # self.debug = debug  # set in parseArgs
@@ -187,11 +190,15 @@ images, and respects robots.txt, which all provide good security.
             dcap['phantomjs.page.settings.userAgent'] = ( self.user_agent )
             dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
             dcap['phantomjs.page.settings.clearMemoryCaches'] = ( 'true' )
+            dcap['phantomjs.page.settings.resourceTimeout'] = ( max(2000,int(self.timeout * 1000)) )
+            dcap['acceptSslCerts'] = ( True )
+            dcap['applicationCacheEnabled'] = ( False )
+            dcap['handlesAlerts'] = ( False )
             dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
-            driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=['--disk-cache=false','--ignore-ssl-errors=true','--ssl-protocol=any'])
+            driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=['--disk-cache=false','--ignore-ssl-errors=false','--ssl-protocol=TLSv1.2'])
             driver.set_window_size(1296,1018)   # Tor browser size on Linux
-            driver.implicitly_wait(30)
-            driver.set_page_load_timeout(30)
+            driver.implicitly_wait(self.timeout+10)
+            driver.set_page_load_timeout(self.timeout+10)
             self.session = driver
 
     def quit_session(self):
@@ -419,7 +426,7 @@ images, and respects robots.txt, which all provide good security.
         '''HTTP GET of a websearch, then add any embedded links.'''
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
         # return self.session.get(url)
-        signal.alarm(20)  # set an alarm
+        signal.alarm(self.timeout+2)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
         except self.TimeoutError as e:
@@ -443,7 +450,7 @@ images, and respects robots.txt, which all provide good security.
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
         if not self.check_robots(url): return  # bail out if robots.txt says to
-        signal.alarm(20)  # set an alarm
+        signal.alarm(self.timeout+2)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
         except self.TimeoutError as e:
