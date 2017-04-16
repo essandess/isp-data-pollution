@@ -386,8 +386,7 @@ images, and respects robots.txt, which all provide good security.
     def set_user_agent(self):
         global user_agent
         self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
-        if hasattr(self,'session'): self.quit_session()
-        self.open_session()
+        self.session.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
 
     def remove_link(self):
         url = random.sample(self.links,1)[0]
