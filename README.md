@@ -145,7 +145,7 @@ sudo pip-3.4 install numpy requests selenium Faker
 I also like MacPorts for native builds, so I might also use:
 
 ```
-sudo port install py34-numpy py34-requests phantomjs
+sudo port install py34-numpy py34-requests py34-psutil phantomjs
 ```
 
 Figure out how to install these libraries on your OS, and the script will run.
