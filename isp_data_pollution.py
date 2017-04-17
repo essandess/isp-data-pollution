@@ -548,7 +548,7 @@ images, and respects robots.txt, which all provide good security.
             if rss_mb > 1024:  # 1 GB rss limit
                 self.quit_session()
                 self.open_session()
-                pid = self.phantomjs_pid()
+                pid, _ = self.phantomjs_pid_and_memory()
             # check existence
             os.kill(pid, 0)
         except (OSError,BaseException) as e:
