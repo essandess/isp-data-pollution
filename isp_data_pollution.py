@@ -20,7 +20,7 @@ __author__ = 'stsmith'
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, tarfile, time
+import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, sys, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
