@@ -544,19 +544,40 @@ images, and respects robots.txt, which all provide good security.
         # http://stackoverflow.com/questions/568271/how-to-check-if-there-exists-a-process-with-a-given-pid-in-python
         try:
             if not hasattr(self,'session'): self.open_session()
-            pid = self.session.service.process.pid
+            pid = self.phantomjs_pid()
             rss_mb = psutil.Process(pid).memory_info().rss/float(2**20)
             if rss_mb > 1024:  # 1 GB rss limit
                 self.quit_session()
                 self.open_session()
-                pid = self.session.service.process.pid
+                pid = self.phantomjs_pid()
             # check existence
             os.kill(pid, 0)
         except (OSError,BaseException) as e:
             if self.debug: print(e)
             return False
+        except psutil.ZombieProcess as e:
+            if self.debug: print(e)
+            raise Exception("There's a phantomjs zombie, and the thread shouldn't have reached this statement.")
         else:
             return True
+
+    def phantomjs_pid(self):
+        """ Return the pid of the phantomjs process, restart if it's a zombie.
+        and exit if a restart isn't working after three attempts. """
+        for k in range(3):    # three strikes
+            try:
+                pid = self.session.service.process.pid
+            except psutil.ZombieProcess as e:
+                if self.debug: print(e)
+                self.quit_session()
+                self.open_session()
+            except BaseException as e:
+                if self.debug: print(e)
+            finally:
+                break
+        else:  # throw in the towel and exit if no viable phantomjs process after multiple attempts
+            sys.exit()
+        return pid
 
 if __name__ == "__main__":
     ISPDataPollution()
