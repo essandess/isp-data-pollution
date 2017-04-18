@@ -232,8 +232,11 @@ images, and respects robots.txt, which all provide good security.
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
         if hasattr(self, 'session'):
             self.session.delete_all_cookies()
-            self.session.execute_script('window.localStorage.clear();')
-            self.session.execute_script('window.sessionStorage.clear();')
+            try:
+                self.session.execute_script('window.localStorage.clear();')
+                self.session.execute_script('window.sessionStorage.clear();')
+            except Exception as e:
+                if self.debug: print(e)
 
     def get_blacklist(self):
         self.blacklist_domains = set()
