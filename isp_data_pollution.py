@@ -179,6 +179,7 @@ images, and respects robots.txt, which all provide good security.
         self.gb_per_month = min(2048,max(1,self.gb_per_month))  # min-max bandwidth limits
 
     def open_session(self):
+        self.quit_session()
         if not hasattr(self, 'session') or not isinstance(self.session,webdriver.phantomjs.webdriver.WebDriver):
             # phantomjs session
             # http://engineering.shapesecurity.com/2015/01/detecting-phantomjs-based-visitors.html
@@ -201,13 +202,31 @@ images, and respects robots.txt, which all provide good security.
             driver.set_page_load_timeout(self.timeout+10)
             self.session = driver
 
-    def quit_session(self):
+    def quit_session(self,pid=None):
+        ''' close, kill -9, quit, del '''
         # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
         if hasattr(self,'session'):
-            self.session.close()
-            self.session.service.process.send_signal(signal.SIGTERM)
-            self.session.quit()
-            del self.session
+            try:
+                self.session.close()
+            except Exception as e:
+                if self.debug: print(e)
+            try:
+                self.session.service.process.send_signal(signal.SIGTERM)
+            except Exception as e:
+                if self.debug: print(e)
+                try:
+                    if pid is None: pid, _ = self.phantomjs_pid_and_memory()
+                except Exception as e:
+                    if self.debug: print(e)
+                try:
+                    os.kill(pid, signal.SIGTERM)  # overkill (pun intended)
+                except Exception as e:
+                    if self.debug: print(e)
+            try:
+                self.session.quit()
+                del self.session  # only delete session if quit is successful
+            except Exception as e:
+                if self.debug: print(e)
 
     def clear_session(self):
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
@@ -253,7 +272,7 @@ images, and respects robots.txt, which all provide good security.
             tgz.close()
             tmpfile.close()
             if self.verbose: print('done.',flush=True)
-        except BaseException as e:
+        except Exception as e:
             if self.verbose: print(e)
         # ignore problem urls
         self.blacklist_urls |= { 'about:blank' }
@@ -265,7 +284,7 @@ images, and respects robots.txt, which all provide good security.
             response = reqsession.get(self.wordsite_url,timeout=10)
             self.words = response.content.decode('utf-8').splitlines()
             reqsession.close()
-        except BaseException as e:
+        except Exception as e:
             if self.debug: print(e)
             self.words = [ 'FUBAR' ]
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
@@ -286,7 +305,7 @@ images, and respects robots.txt, which all provide good security.
                 self.exceeded_bandwidth_tasks()
                 self.every_hour_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
-            except BaseException as e:
+            except Exception as e:
                 if self.debug: print(e)
 
     def pollute(self):
@@ -306,7 +325,7 @@ images, and respects robots.txt, which all provide good security.
         # bias with non-random seed links
         self.links |= set(self.seed_bias_links)
         if len(self.links) < self.max_links_cached:
-            num_words = max(1,int(np.round(npr.poisson(1)+0.5)))  # mean of 1.5 words per search
+            num_words = max(1,npr.poisson(1.33)+1)  # mean of 1.33 words per search
             word = ' '.join(random.sample(self.words,num_words))
             if self.debug: print('Seeding with search for \'{}\'…'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
@@ -440,7 +459,7 @@ images, and respects robots.txt, which all provide good security.
             return [ div.find_element_by_tag_name('a').get_attribute('href') \
                 for div in self.session.find_elements_by_css_selector('div.g') \
                      if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
-        except BaseException as e:
+        except Exception as e:
             if self.debug: print(e)
             return []
 
@@ -464,7 +483,7 @@ images, and respects robots.txt, which all provide good security.
             return [ a.get_attribute('href') \
                      for a in self.session.find_elements_by_tag_name('a') \
                      if a.get_attribute('href') is not None ]
-        except BaseException as e:
+        except Exception as e:
             if self.debug: print(e)
             return []
 
@@ -476,7 +495,7 @@ images, and respects robots.txt, which all provide good security.
             rp.set_url(url_robots)
             rp.read()
             result = rp.can_fetch(self.user_agent,url)
-        except BaseException as e:
+        except Exception as e:
             if self.debug: print(e)
         del rp      # ensure self.close() in urllib
         return result
@@ -494,7 +513,7 @@ images, and respects robots.txt, which all provide good security.
                 current_url = self.session.current_url
                 # the current_url method breaks on a lot of sites, e.g.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
-            except BaseException as e:
+            except Exception as e:
                 if self.debug: print(e)
         if self.debug:
             print("'{}': {:d} links added, {:d} total".format(current_url,k,len(self.links)))
@@ -533,7 +552,7 @@ images, and respects robots.txt, which all provide good security.
         try:
             self.quit_session()
             self.open_session()
-        except BaseException as e:
+        except Exception as e:
             if self.debug: print(e)
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
@@ -546,17 +565,16 @@ images, and respects robots.txt, which all provide good security.
             if not hasattr(self,'session'): self.open_session()
             pid, rss_mb = self.phantomjs_pid_and_memory()
             if rss_mb > 1024:  # 1 GB rss limit
-                self.quit_session()
+                self.quit_session(pid=pid)
                 self.open_session()
                 pid, _ = self.phantomjs_pid_and_memory()
             # check existence
             os.kill(pid, 0)
-        except (OSError,BaseException) as e:
+        except (OSError,psutil.NoSuchProcess,Exception) as e:
             if self.debug: print(e)
+            if issubclass(type(e),psutil.NoSuchProcess):
+                raise Exception("There's a phantomjs zombie, and the thread shouldn't have reached this statement.")
             return False
-        except psutil.ZombieProcess as e:
-            if self.debug: print(e)
-            raise Exception("There's a phantomjs zombie, and the thread shouldn't have reached this statement.")
         else:
             return True
 
@@ -568,12 +586,11 @@ images, and respects robots.txt, which all provide good security.
             try:
                 pid = self.session.service.process.pid
                 rss_mb = psutil.Process(pid).memory_info().rss / float(2 ** 20)
-            except (psutil.ZombieProcess,BaseException) as e:
-                if self.debug: print(e)
-                self.quit_session()
-                self.open_session()
-            finally:
                 break
+            except (psutil.NoSuchProcess,Exception) as e:
+                if self.debug: print(e)
+                self.quit_session(pid=pid)
+                self.open_session()
         else:  # throw in the towel and exit if no viable phantomjs process after multiple attempts
             sys.exit()
         return (pid, rss_mb)
