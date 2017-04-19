@@ -209,34 +209,37 @@ images, and respects robots.txt, which all provide good security.
             try:
                 self.session.close()
             except Exception as e:
-                if self.debug: print(e)
+                if self.debug: print('.close() exception:\n{}'.format(e))
             try:
                 self.session.service.process.send_signal(signal.SIGTERM)
             except Exception as e:
-                if self.debug: print(e)
+                if self.debug: print('.send_signal() exception:\n{}'.format(e))
                 try:
                     if pid is None: pid, _ = self.phantomjs_pid_and_memory()
                 except Exception as e:
-                    if self.debug: print(e)
+                    if self.debug: print('.phantomjs_pid_and_memory() exception:\n{}'.format(e))
                 try:
                     os.kill(pid, signal.SIGTERM)  # overkill (pun intended)
                 except Exception as e:
-                    if self.debug: print(e)
+                    if self.debug: print('.kill() exception:\n{}'.format(e))
             try:
                 self.session.quit()
                 del self.session  # only delete session if quit is successful
             except Exception as e:
-                if self.debug: print(e)
+                if self.debug: print('.quit() exception:\n{}'.format(e))
 
     def clear_session(self):
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
         if hasattr(self, 'session'):
-            self.session.delete_all_cookies()
+            try:
+                self.session.delete_all_cookies()
+            except Exception as e:
+                if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
             try:
                 self.session.execute_script('window.localStorage.clear();')
                 self.session.execute_script('window.sessionStorage.clear();')
             except Exception as e:
-                if self.debug: print(e)
+                if self.debug: print('.execute_script() exception:\n{}'.format(e))
 
     def get_blacklist(self):
         self.blacklist_domains = set()
@@ -288,7 +291,7 @@ images, and respects robots.txt, which all provide good security.
             self.words = response.content.decode('utf-8').splitlines()
             reqsession.close()
         except Exception as e:
-            if self.debug: print(e)
+            if self.debug: print('requests exception:\n{}'.format(e))
             self.words = [ 'FUBAR' ]
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
@@ -309,7 +312,7 @@ images, and respects robots.txt, which all provide good security.
                 self.every_hour_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
             except Exception as e:
-                if self.debug: print(e)
+                if self.debug: print('.pollute() exception:\n{}'.format(e))
 
     def pollute(self):
         if not self.quit_driver_every_call: self.check_phantomjs_process()
@@ -369,8 +372,10 @@ images, and respects robots.txt, which all provide good security.
             if self.hour_trigger:
                 self.set_user_agent()
                 if hasattr(self,'session'):
-                    # self.session.cookies.clear() # requests session
-                    self.session.delete_all_cookies()
+                    try:
+                        self.session.delete_all_cookies()
+                    except Exception as e:
+                        if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
                 self.hour_trigger = False
         else:
             self.hour_trigger = True
@@ -406,7 +411,10 @@ images, and respects robots.txt, which all provide good security.
     def set_user_agent(self):
         global user_agent
         self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
-        self.session.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
+        try:
+            self.session.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
+        except Exception as e:
+            if self.debug: print('.update() exception:\n{}'.format(e))
 
     def remove_link(self):
         url = random.sample(self.links,1)[0]
@@ -444,15 +452,17 @@ images, and respects robots.txt, which all provide good security.
     def get_websearch(self,query):
         '''HTTP GET of a websearch, then add any embedded links.'''
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
-        # return self.session.get(url)
         signal.alarm(self.timeout+2)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
         except self.TimeoutError as e:
-            if self.debug: print(e)
+            if self.debug: print('.get() exception:\n{}'.format(e))
         finally:
             signal.alarm(0)  # cancel the alarm
-        self.data_usage += len(self.session.page_source)
+        try:
+            self.data_usage += len(self.session.page_source)
+        except Exception as e:
+            if self.debug: print('.page_source exception:\n{}'.format(e))
         new_links = self.websearch_links()
         if len(self.links) < self.max_links_cached: self.add_url_links(new_links,url)
 
@@ -463,7 +473,7 @@ images, and respects robots.txt, which all provide good security.
                 for div in self.session.find_elements_by_css_selector('div.g') \
                      if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
         except Exception as e:
-            if self.debug: print(e)
+            if self.debug: print('.find_element_by_tag_name() exception:\n{}'.format(e))
             return []
 
     def get_url(self,url):
@@ -473,10 +483,13 @@ images, and respects robots.txt, which all provide good security.
         try:
             self.session.get(url)  # selenium driver
         except self.TimeoutError as e:
-            if self.debug: print(e)
+            if self.debug: print('.get() exception:\n{}'.format(e))
         finally:
             signal.alarm(0)  # cancel the alarm
-        self.data_usage += len(self.session.page_source)
+        try:
+            self.data_usage += len(self.session.page_source)
+        except Exception as e:
+            if self.debug: print('.page_source exception:\n{}'.format(e))
         new_links = self.url_links()
         if len(self.links) < self.max_links_cached: self.add_url_links(new_links,url)
 
@@ -487,7 +500,7 @@ images, and respects robots.txt, which all provide good security.
                      for a in self.session.find_elements_by_tag_name('a') \
                      if a.get_attribute('href') is not None ]
         except Exception as e:
-            if self.debug: print(e)
+            if self.debug: print('.get_attribute() exception:\n{}'.format(e))
             return []
 
     def check_robots(self,url):
@@ -499,7 +512,7 @@ images, and respects robots.txt, which all provide good security.
             rp.read()
             result = rp.can_fetch(self.user_agent,url)
         except Exception as e:
-            if self.debug: print(e)
+            if self.debug: print('rp.read() exception:\n{}'.format(e))
         del rp      # ensure self.close() in urllib
         return result
 
@@ -517,7 +530,7 @@ images, and respects robots.txt, which all provide good security.
                 # the current_url method breaks on a lot of sites, e.g.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
             except Exception as e:
-                if self.debug: print(e)
+                if self.debug: print('.current_url exception:\n{}'.format(e))
         if self.debug:
             print("'{}': {:d} links added, {:d} total".format(current_url,k,len(self.links)))
         elif self.verbose:
@@ -556,7 +569,7 @@ images, and respects robots.txt, which all provide good security.
             self.quit_session()
             self.open_session()
         except Exception as e:
-            if self.debug: print(e)
+            if self.debug: print('.quit_session() exception:\n{}'.format(e))
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
 
@@ -574,7 +587,7 @@ images, and respects robots.txt, which all provide good security.
             # check existence
             os.kill(pid, 0)
         except (OSError,psutil.NoSuchProcess,Exception) as e:
-            if self.debug: print(e)
+            if self.debug: print('.phantomjs_pid_and_memory() exception:\n{}'.format(e))
             if issubclass(type(e),psutil.NoSuchProcess):
                 raise Exception("There's a phantomjs zombie, and the thread shouldn't have reached this statement.")
             return False
@@ -591,7 +604,7 @@ images, and respects robots.txt, which all provide good security.
                 rss_mb = psutil.Process(pid).memory_info().rss / float(2 ** 20)
                 break
             except (psutil.NoSuchProcess,Exception) as e:
-                if self.debug: print(e)
+                if self.debug: print('.service.process.pid exception:\n{}'.format(e))
                 self.quit_session(pid=pid)
                 self.open_session()
         else:  # throw in the towel and exit if no viable phantomjs process after multiple attempts
