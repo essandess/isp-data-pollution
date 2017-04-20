@@ -24,6 +24,7 @@ import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, psu
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.support.ui import WebDriverWait
 from io import BytesIO
 from faker import Factory
 
@@ -202,14 +203,20 @@ images, and respects robots.txt, which all provide good security.
             driver.set_page_load_timeout(self.timeout+10)
             self.session = driver
 
-    def quit_session(self,pid=None):
+    def quit_session(self,hard_quit=False,pid=None):
         ''' close, kill -9, quit, del '''
         # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
         if hasattr(self,'session'):
-            try:
-                self.session.close()
-            except Exception as e:
-                if self.debug: print('.close() exception:\n{}'.format(e))
+            if not hard_quit:
+                signal.alarm(3)
+                try:
+                    self.session.close()
+                except self.TimeoutError as e:
+                    if self.debug: print('.close() timeout exception:\n{}'.format(e))
+                except Exception as e:
+                    if self.debug: print('.close() exception:\n{}'.format(e))
+                finally:
+                    signal.alarm(0)  # cancel the alarm
             try:
                 self.session.service.process.send_signal(signal.SIGTERM)
             except Exception as e:
@@ -469,8 +476,10 @@ images, and respects robots.txt, which all provide good security.
     def websearch_links(self):
         '''Webpage format for a popular search engine, <div class="g">'''
         try:
+            # https://github.com/detro/ghostdriver/issues/169
+            elements = WebDriverWait(self.session,3).until(lambda x: x.find_elements_by_css_selector('div.g'))
             return [ div.find_element_by_tag_name('a').get_attribute('href') \
-                for div in self.session.find_elements_by_css_selector('div.g') \
+                for div in elements \
                      if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
         except Exception as e:
             if self.debug: print('.find_element_by_tag_name() exception:\n{}'.format(e))
@@ -496,9 +505,10 @@ images, and respects robots.txt, which all provide good security.
     def url_links(self):
         '''Generic webpage link finder format.'''
         try:
+            # https://github.com/detro/ghostdriver/issues/169
+            elements = WebDriverWait(self.session,3).until(lambda x: x.find_elements_by_tag_name('a'))
             return [ a.get_attribute('href') \
-                     for a in self.session.find_elements_by_tag_name('a') \
-                     if a.get_attribute('href') is not None ]
+                for a in elements if a.get_attribute('href') is not None ]
         except Exception as e:
             if self.debug: print('.get_attribute() exception:\n{}'.format(e))
             return []
@@ -566,7 +576,7 @@ images, and respects robots.txt, which all provide good security.
         # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
         if self.debug: print('Looks like phantomjs has hung.')
         try:
-            self.quit_session()
+            self.quit_session(hard_quit=True)
             self.open_session()
         except Exception as e:
             if self.debug: print('.quit_session() exception:\n{}'.format(e))
