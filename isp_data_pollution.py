@@ -350,7 +350,7 @@ images, and respects robots.txt, which all provide good security.
         return -np.fromiter((self.xlgx(x) for x in p.flatten()),dtype=p.dtype).sum()
 
     def xlgx(self,x):
-        x = max(0.,min(1.,x))
+        x = np.abs(x)
         y = 0.
         if not (x == 0. or x == 1.):
             y = x*np.log2(x)
@@ -463,6 +463,8 @@ images, and respects robots.txt, which all provide good security.
         domain_count = np.array([(dmn,len(self.domain_links[dmn])) for dmn in self.domain_links])
         p = np.array([np.float(c) for d,c in domain_count])
         count_total = p.sum()
+        # log-sampling [log(x+1)] to bias lower count domains
+        p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
         if count_total > 0:
             p = p/p.sum()
             cnts = npr.multinomial(n, pvals=p)
@@ -489,8 +491,8 @@ images, and respects robots.txt, which all provide good security.
         result = False
         domain = self.domain_name(url)
         if self.link_count() < self.max_links_cached \
-                and len(getattr(self.domain_links,domain,[])) < self.max_links_per_domain \
-                and url not in getattr(self.domain_links,domain,set()):
+                and len(self.domain_links.get(domain,[])) < self.max_links_per_domain \
+                and url not in self.domain_links.get(domain,set()):
             self.domain_links.setdefault(domain, set())
             self.domain_links[domain].add(url)
             result = True
@@ -500,7 +502,7 @@ images, and respects robots.txt, which all provide good security.
     def remove_link(self,url):
         result = False
         domain = self.domain_name(url)
-        if url in getattr(self.domain_links,domain,set()):
+        if url in self.domain_links.get(domain,set()):
             self.domain_links[domain].remove(url)
             if len(self.domain_links[domain]) == 0:
                 del self.domain_links[domain]
