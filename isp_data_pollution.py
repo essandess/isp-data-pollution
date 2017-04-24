@@ -159,8 +159,7 @@ images, and respects robots.txt, which all provide good security.
         self.fake = Factory.create()
         self.hour_trigger = True
         self.twentyfour_hour_trigger = True
-        self.links = set()
-        self.link_count = dict()
+        self.domain_links = dict()
         self.start_time = time.time()
         self.data_usage = 0
         self.get_blacklist()
@@ -323,26 +322,39 @@ images, and respects robots.txt, which all provide good security.
 
     def pollute(self):
         if not self.quit_driver_every_call: self.check_phantomjs_process()
-        if len(self.links) < 2000:
+        if self.link_count() < 2000:
             if self.quit_driver_every_call: self.open_session()
             self.seed_links()
             self.clear_session()
             if self.quit_driver_every_call: self.quit_session()
-        url = self.remove_link()
+        url = self.pop_link()
         if self.quit_driver_every_call: self.open_session()
         self.get_url(url)
         self.clear_session()
         if self.quit_driver_every_call: self.quit_session()
 
+    def link_count(self):
+        return int(np.array([len(self.domain_links[dmn]) for dmn in self.domain_links]).sum())
+
     def seed_links(self):
         # bias with non-random seed links
-        self.links |= set(self.seed_bias_links)
-        if len(self.links) < self.max_links_cached:
+        self.bias_links()
+        if self.link_count() < self.max_links_cached:
             num_words = max(1,npr.poisson(1.33)+1)  # mean of 1.33 words per search
-            word = ' '.join(random.sample(self.words,num_words))
+            if num_words == 1:
+                word = ' '.join(random.sample(self.words,num_words))
+            else:
+                if npr.uniform() < 0.5:
+                    word = ' '.join(random.sample(self.words,num_words))
+                else:      # quote the first two words together
+                    word = ' '.join(['"{}"'.format(' '.join(random.sample(self.words, 2))),
+                                     ' '.join(random.sample(self.words, num_words-2))])
             if self.debug: print('Seeding with search for \'{}\'…'.format(word))
             # self.add_url_links(self.websearch(word).content.decode('utf-8'))
             self.get_websearch(word)
+
+    def bias_links(self):
+        for url in self.seed_bias_links: self.add_link(url)
 
     def diurnal_cycle_test(self):
         now = dt.datetime.now()
@@ -368,9 +380,9 @@ images, and respects robots.txt, which all provide good security.
     def exceeded_bandwidth_tasks(self):
         if self.bandwidth_test():
             # decimate the stack and clear the cookies
-            if len(self.links) > int(np.ceil(0.81*self.max_links_cached)):
-                for url in random.sample(self.links,int(np.ceil(len(self.links)/10.))):
-                    self.remove_link(url)
+            if self.link_count() > int(np.ceil(0.81*self.max_links_cached)):
+                for url in self.draw_links(n=int(np.ceil(self.link_count()/10.))):
+                    self.pop_link()
             time.sleep(120)
 
     def every_hour_tasks(self):
@@ -411,9 +423,9 @@ images, and respects robots.txt, which all provide good security.
             # reset bw stats and (really) decimate the stack every couple of weeks
             self.start_time = time.time()
             self.data_usage = 0
-            if len(self.links) > int(np.ceil(0.49*self.max_links_cached)):
-                for url in random.sample(self.links,int(np.ceil(len(self.links)/3.))):
-                    self.remove_link(url)
+            if self.link_count() > int(np.ceil(0.49*self.max_links_cached)):
+                for url in self.draw_links(n=int(np.ceil(self.link_count()/3.))):
+                    self.pop_link(url)
 
     def set_user_agent(self):
         global user_agent
@@ -423,35 +435,57 @@ images, and respects robots.txt, which all provide good security.
         except Exception as e:
             if self.debug: print('.update() exception:\n{}'.format(e))
 
-    def remove_link(self):
-        url = random.sample(self.links,1)[0]
+    def draw_link(self):
+        return self.draw_links(n=1)[0]
+
+    def draw_links(self,n=1):
+        urls = []
+        domain_count = np.array([(dmn,len(self.domain_links[dmn])) for dmn in self.domain_links])
+        p = np.array([np.float(c) for d,c in domain_count])
+        count_total = p.sum()
+        if count_total > 0:
+            p = p/p.sum()
+            cnts = npr.multinomial(n, pvals=p)
+            if n > 1:
+                for k in range(len(cnts)):
+                    domain = domain_count[k][0]
+                    cnt = min(cnts[k],domain_count[k][1])
+                    for url in random.sample(self.domain_links[domain],cnt):
+                        urls.append(url)
+            else:
+                k = int(np.nonzero(cnts)[0])
+                domain = domain_count[k][0]
+                url = random.sample(self.domain_links[domain],1)[0]
+                urls.append(url)
+        return urls
+
+    def pop_link(self):
+        url = self.draw_link()
         if npr.uniform() < 0.95:  # 95% 1 GET, ~5% 2 GETs, .2% three GETs
-            self.links.remove(url)  # pop a random item from the stack
-            self.decrement_link_count(url)
+            self.remove_link(url)  # pop a random item from the stack
         return url
 
     def add_link(self,url):
         result = False
         domain = self.domain_name(url)
-        self.link_count.setdefault(domain,0)
-        if len(self.links) < self.max_links_cached \
-                and self.link_count[domain] < self.max_links_per_domain \
-                and url not in self.links:
-            self.links.add(url)
-            self.increment_link_count(url,domain)
+        if self.link_count() < self.max_links_cached \
+                and len(getattr(self.domain_links,domain,[])) < self.max_links_per_domain \
+                and url not in getattr(self.domain_links,domain,set()):
+            self.domain_links.setdefault(domain, set())
+            self.domain_links[domain].add(url)
             result = True
             # if self.debug: print('\tAdded link \'{}\'…'.format(url))
         return result
 
-    def decrement_link_count(self,url,domain=None):
-        if domain is None: domain = self.domain_name(url)
-        self.link_count.setdefault(domain,0)
-        if self.link_count[domain] > 0: self.link_count[domain] -= 1
-
-    def increment_link_count(self,url,domain=None):
-        if domain is None: domain = self.domain_name(url)
-        self.link_count.setdefault(domain,0)
-        self.link_count[domain] += 1
+    def remove_link(self,url):
+        result = False
+        domain = self.domain_name(url)
+        if url in getattr(self.domain_links,domain,set()):
+            self.domain_links[domain].remove(url)
+            if len(self.domain_links[domain]) == 0:
+                self.domain_links.remove(domain)
+            result = True
+        return result
 
     def domain_name(self,url):
         return '.'.join(uprs.urlparse(url).netloc.split('.')[-2:])
@@ -471,7 +505,7 @@ images, and respects robots.txt, which all provide good security.
         except Exception as e:
             if self.debug: print('.page_source exception:\n{}'.format(e))
         new_links = self.websearch_links()
-        if len(self.links) < self.max_links_cached: self.add_url_links(new_links,url)
+        if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
     def websearch_links(self):
         '''Webpage format for a popular search engine, <div class="g">'''
@@ -500,7 +534,7 @@ images, and respects robots.txt, which all provide good security.
         except Exception as e:
             if self.debug: print('.page_source exception:\n{}'.format(e))
         new_links = self.url_links()
-        if len(self.links) < self.max_links_cached: self.add_url_links(new_links,url)
+        if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
     def url_links(self):
         '''Generic webpage link finder format.'''
@@ -542,13 +576,13 @@ images, and respects robots.txt, which all provide good security.
             except Exception as e:
                 if self.debug: print('.current_url exception:\n{}'.format(e))
         if self.debug:
-            print("'{}': {:d} links added, {:d} total".format(current_url,k,len(self.links)))
+            print("'{}': {:d} links added, {:d} total".format(current_url,k,self.link_count()))
         elif self.verbose:
             self.print_progress(k,current_url)
 
     def print_progress(self,num_links,url,terminal_width=80):
         # truncate or fill with white space
-        text_suffix = ': {:d} links added, {:d} total'.format(num_links,len(self.links))
+        text_suffix = ': {:d} links added, {:d} total'.format(num_links,self.link_count())
         chars_used =  2 + len(text_suffix)
         if len(url) + chars_used > terminal_width:
             url = url[:terminal_width-chars_used-1] + '…'
