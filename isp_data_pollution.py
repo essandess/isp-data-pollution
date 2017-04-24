@@ -336,6 +336,26 @@ images, and respects robots.txt, which all provide good security.
     def link_count(self):
         return int(np.array([len(self.domain_links[dmn]) for dmn in self.domain_links]).sum())
 
+    def domain_entropy(self):
+        result = 0.
+        domain_count = np.array([(dmn, len(self.domain_links[dmn])) for dmn in self.domain_links])
+        p = np.array([np.float(c) for d, c in domain_count])
+        count_total = p.sum()
+        if count_total > 0:
+            p = p / p.sum()
+            result = self.entropy(p)
+        return result
+
+    def entropy(self,p):
+        return -np.fromiter((self.xlgx(x) for x in p.flatten()),dtype=p.dtype).sum()
+
+    def xlgx(self,x):
+        x = max(0.,min(1.,x))
+        y = 0.
+        if not (x == 0. or x == 1.):
+            y = x*np.log2(x)
+        return y
+
     def seed_links(self):
         # bias with non-random seed links
         self.bias_links()
@@ -576,7 +596,7 @@ images, and respects robots.txt, which all provide good security.
             except Exception as e:
                 if self.debug: print('.current_url exception:\n{}'.format(e))
         if self.debug:
-            print("'{}': {:d} links added, {:d} total".format(current_url,k,self.link_count()))
+            print("'{}': {:d} links added, {:d} total, {:d} bits domain entropy".format(current_url,k,self.link_count(),int(np.round(self.domain_entropy()))))
         elif self.verbose:
             self.print_progress(k,current_url)
 
