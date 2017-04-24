@@ -483,7 +483,7 @@ images, and respects robots.txt, which all provide good security.
         if url in getattr(self.domain_links,domain,set()):
             self.domain_links[domain].remove(url)
             if len(self.domain_links[domain]) == 0:
-                self.domain_links.remove(domain)
+                del self.domain_links[domain]
             result = True
         return result
 
