@@ -455,16 +455,16 @@ images, and respects robots.txt, which all provide good security.
         except Exception as e:
             if self.debug: print('.update() exception:\n{}'.format(e))
 
-    def draw_link(self):
-        return self.draw_links(n=1)[0]
+    def draw_link(self,log_sampling=True):
+        return self.draw_links(n=1,log_sampling=log_sampling)[0]
 
-    def draw_links(self,n=1):
+    def draw_links(self,n=1,log_sampling=False):
         urls = []
         domain_count = np.array([(dmn,len(self.domain_links[dmn])) for dmn in self.domain_links])
         p = np.array([np.float(c) for d,c in domain_count])
         count_total = p.sum()
-        # log-sampling [log(x+1)] to bias lower count domains
-        p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
+        if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
+            p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
         if count_total > 0:
             p = p/p.sum()
             cnts = npr.multinomial(n, pvals=p)
