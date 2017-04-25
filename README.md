@@ -145,7 +145,7 @@ sudo pip-3.4 install numpy requests selenium Faker
 I also like MacPorts for native builds, so I might also use:
 
 ```
-sudo port install py34-numpy py34-requests py34-psutil phantomjs
+sudo port install py34-numpy py34-requests py34-psutil phantomjs psutil
 ```
 
 Figure out how to install these libraries on your OS, and the script will run.
@@ -176,8 +176,8 @@ pip install pyvirtualdisplay
 
 In order to isolate pip library files, virtualenv is convenient. If you prefer this method, you can follow the steps below:
 ```
-pushd ~/.virtualenv/ && virtualenv -p python3 isp-pollute && popd
+pushd ~/.virtualenvs/ && virtualenv -p python3 isp-pollute && popd
 workon isp-pollute
-pip install numpy requests selenium Faker
+pip install numpy requests selenium Faker psutil
 sudo apt-get install phantomjs
 ```
