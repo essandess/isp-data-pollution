@@ -598,13 +598,13 @@ images, and respects robots.txt, which all provide good security.
             except Exception as e:
                 if self.debug: print('.current_url exception:\n{}'.format(e))
         if self.debug:
-            print("'{}': {:d} links added, {:d} total, {:d} bits domain entropy".format(current_url,k,self.link_count(),int(np.round(self.domain_entropy()))))
+            print("'{}': {:d} links added, {:d} total, {:.1f} bits domain entropy".format(current_url,k,self.link_count(),self.domain_entropy()))
         elif self.verbose:
             self.print_progress(k,current_url)
 
     def print_progress(self,num_links,url,terminal_width=80):
         # truncate or fill with white space
-        text_suffix = ': {:d} links added, {:d} total'.format(num_links,self.link_count())
+        text_suffix = ': +{:d} of {:d} links, H(domain) = {:.1f} b'.format(num_links,self.link_count(),self.domain_entropy())
         chars_used =  2 + len(text_suffix)
         if len(url) + chars_used > terminal_width:
             url = url[:terminal_width-chars_used-1] + '…'
