@@ -86,13 +86,17 @@ seed_bias_links = ['http://my.xfinity.com/news',
 
 # monkeypatch the read class method in RobotFileParser
 # many sites will block access to robots.txt without a standard User-Agent header
+robot_timeout = 3
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
+
+    timeout = robot_timeout  # short-term timeout
+
     def read(self):
         """Reads the robots.txt URL and feeds it to the parser."""
         try:
             headers = {'User-Agent': user_agent, }
             request = urllib.request.Request(self.url, None, headers)
-            f = urllib.request.urlopen(request)
+            f = urllib.request.urlopen(request,timeout=self.timeout)
             # f = urllib.request.urlopen(self.url)   #! original code
         except urllib.error.HTTPError as err:
             if err.code in (401, 403):
@@ -515,6 +519,7 @@ images, and respects robots.txt, which all provide good security.
     def get_websearch(self,query):
         '''HTTP GET of a websearch, then add any embedded links.'''
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
+        signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         signal.alarm(self.timeout+2)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
@@ -544,6 +549,7 @@ images, and respects robots.txt, which all provide good security.
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
         if not self.check_robots(url): return  # bail out if robots.txt says to
+        signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
         signal.alarm(self.timeout+2)  # set an alarm
         try:
             self.session.get(url)  # selenium driver
@@ -570,15 +576,20 @@ images, and respects robots.txt, which all provide good security.
             return []
 
     def check_robots(self,url):
-        result = False
+        result = True
+        url_robots = uprs.urlunparse(
+        uprs.urlparse(url)._replace(scheme='https', path='/robots.txt', query='', params=''))
+        signal.signal(signal.SIGALRM, self.robot_hang_handler) # register hang handler
+#        signal.alarm(robot_timeout+1)  # set a short-term alarm a little longer than robot_timeout
         try:
-            url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(scheme='https',path='/robots.txt',query='',params=''))
             rp = RobotFileParserUserAgent()
             rp.set_url(url_robots)
             rp.read()
             result = rp.can_fetch(self.user_agent,url)
-        except Exception as e:
+        except (self.TimeoutError,Exception) as e:
             if self.debug: print('rp.read() exception:\n{}'.format(e))
+        finally:
+            signal.alarm(0)  # cancel the alarm
         del rp      # ensure self.close() in urllib
         return result
 
@@ -638,6 +649,10 @@ images, and respects robots.txt, which all provide good security.
             if self.debug: print('.quit_session() exception:\n{}'.format(e))
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
+
+    def robot_hang_handler(self, signum, frame):
+        if self.debug: print('Looks like robotparser has hung.')
+        raise self.TimeoutError('robotparser is taking too long')
 
     def check_phantomjs_process(self):
         '''Check if phantomjs is running.'''
