@@ -86,10 +86,10 @@ seed_bias_links = ['http://my.xfinity.com/news',
 
 # monkeypatch the read class method in RobotFileParser
 # many sites will block access to robots.txt without a standard User-Agent header
-robot_timeout = 3
+short_timeout = 3
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
 
-    timeout = robot_timeout  # short-term timeout
+    timeout = short_timeout  # short-term timeout
 
     def read(self):
         """Reads the robots.txt URL and feeds it to the parser."""
@@ -110,6 +110,7 @@ class RobotFileParserUserAgent(robotparser.RobotFileParser):
 # Notes for the future:
 # 1. The bandwidth usage is undoubtedly (much) smaller because gzip encoding is used
 # 2. A lightweight proxy could be used for accurate bandwidth, and header editing
+
 
 class ISPDataPollution:
     '''Re: https://www.eff.org/deeplinks/2017/03/senate-puts-isp-profits-over-your-privacy
@@ -159,7 +160,13 @@ images, and respects robots.txt, which all provide good security.
         # self.gb_per_month = gb_per_month  # set in parseArgs
         # self.debug = debug  # set in parseArgs
         self.args = self.args = self.parseArgs()
-        signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
+        # timeout configurable decorators
+        self.phantomjs_timeout = self.block_timeout(self.phantomjs_hang_handler, \
+            alarm_time=self.timeout+2,errors=(self.TimeoutError,), debug=self.debug)
+        self.phantomjs_short_timeout = self.block_timeout(self.phantomjs_hang_handler, \
+            alarm_time=short_timeout+1,errors=(self.TimeoutError,Exception), debug=self.debug)
+        self.robots_timeout = self.block_timeout(self.robots_hang_handler, \
+            alarm_time=short_timeout+1,errors=(self.TimeoutError,), debug=self.debug)
         self.fake = Factory.create()
         self.hour_trigger = True
         self.twentyfour_hour_trigger = True
@@ -211,17 +218,13 @@ images, and respects robots.txt, which all provide good security.
         # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
         if hasattr(self,'session'):
             if not hard_quit:
-                signal.alarm(3)
-                try:
-                    self.session.close()
-                except self.TimeoutError as e:
-                    if self.debug: print('.close() timeout exception:\n{}'.format(e))
-                except Exception as e:
-                    if self.debug: print('.close() exception:\n{}'.format(e))
-                finally:
-                    signal.alarm(0)  # cancel the alarm
+                @self.phantomjs_short_timeout
+                def phantomjs_close(): self.session.close()
+                phantomjs_close()
             try:
-                self.session.service.process.send_signal(signal.SIGTERM)
+                @self.phantomjs_short_timeout
+                def phantomjs_send_signal(): self.session.service.process.send_signal(signal.SIGTERM)
+                phantomjs_send_signal()
             except Exception as e:
                 if self.debug: print('.send_signal() exception:\n{}'.format(e))
                 try:
@@ -233,8 +236,11 @@ images, and respects robots.txt, which all provide good security.
                 except Exception as e:
                     if self.debug: print('.kill() exception:\n{}'.format(e))
             try:
-                self.session.quit()
-                del self.session  # only delete session if quit is successful
+                @self.phantomjs_short_timeout
+                def phantomjs_quit():
+                    self.session.quit()
+                    del self.session  # only delete session if quit is successful
+                phantomjs_quit()
             except Exception as e:
                 if self.debug: print('.quit() exception:\n{}'.format(e))
 
@@ -242,12 +248,17 @@ images, and respects robots.txt, which all provide good security.
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
         if hasattr(self, 'session'):
             try:
-                self.session.delete_all_cookies()
+                @self.phantomjs_short_timeout
+                def phantomjs_delete_all_cookies(): self.session.delete_all_cookies()
+                phantomjs_delete_all_cookies()
             except Exception as e:
                 if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
             try:
-                self.session.execute_script('window.localStorage.clear();')
-                self.session.execute_script('window.sessionStorage.clear();')
+                @self.phantomjs_short_timeout
+                def phantomjs_clear():
+                    self.session.execute_script('window.localStorage.clear();')
+                    self.session.execute_script('window.sessionStorage.clear();')
+                phantomjs_clear()
             except Exception as e:
                 if self.debug: print('.execute_script() exception:\n{}'.format(e))
 
@@ -416,7 +427,9 @@ images, and respects robots.txt, which all provide good security.
                 self.set_user_agent()
                 if hasattr(self,'session'):
                     try:
-                        self.session.delete_all_cookies()
+                        @self.phantomjs_short_timeout
+                        def phantomjs_delete_all_cookies(): self.session.delete_all_cookies()
+                        phantomjs_delete_all_cookies()
                     except Exception as e:
                         if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
                 self.hour_trigger = False
@@ -455,7 +468,10 @@ images, and respects robots.txt, which all provide good security.
         global user_agent
         self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
         try:
-            self.session.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
+            @self.phantomjs_short_timeout
+            def phantomjs_capabilities_update():
+                self.session.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
+            phantomjs_capabilities_update()
         except Exception as e:
             if self.debug: print('.update() exception:\n{}'.format(e))
 
@@ -519,78 +535,86 @@ images, and respects robots.txt, which all provide good security.
     def get_websearch(self,query):
         '''HTTP GET of a websearch, then add any embedded links.'''
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
-        signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
-        signal.alarm(self.timeout+2)  # set an alarm
-        try:
-            self.session.get(url)  # selenium driver
-        except self.TimeoutError as e:
-            if self.debug: print('.get() exception:\n{}'.format(e))
-        finally:
-            signal.alarm(0)  # cancel the alarm
-        try:
-            self.data_usage += len(self.session.page_source)
-        except Exception as e:
-            if self.debug: print('.page_source exception:\n{}'.format(e))
+        @self.phantomjs_timeout
+        def phantomjs_get(): self.session.get(url)  # selenium driver
+        phantomjs_get()
+        @self.phantomjs_short_timeout
+        def phantomjs_page_source(): self.data_usage += len(self.session.page_source)
+        phantomjs_page_source()
         new_links = self.websearch_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
     def websearch_links(self):
         '''Webpage format for a popular search engine, <div class="g">'''
+        # https://github.com/detro/ghostdriver/issues/169
+        @self.phantomjs_short_timeout
+        def phantomjs_find_elements_by_css_selector():
+            return WebDriverWait(self.session, 3).until(lambda x: x.find_elements_by_css_selector('div.g'))
+        elements = phantomjs_find_elements_by_css_selector()
+        # get links in random order until max. per page
+        k = 0
+        links = []
         try:
-            # https://github.com/detro/ghostdriver/issues/169
-            elements = WebDriverWait(self.session,3).until(lambda x: x.find_elements_by_css_selector('div.g'))
-            return [ div.find_element_by_tag_name('a').get_attribute('href') \
-                for div in elements \
-                     if div.find_element_by_tag_name('a').get_attribute('href') is not None ]
+            for div in sorted(elements,key=lambda k: random.random()):
+                @self.phantomjs_short_timeout
+                def phantomjs_find_element_by_tag_name():
+                    if div.find_element_by_tag_name('a').get_attribute('href') is not None:
+                        links.append(div.find_element_by_tag_name('a').get_attribute('href'))
+                phantomjs_find_element_by_tag_name()
+                k += 1
+                if k > self.max_links_per_page: break
         except Exception as e:
             if self.debug: print('.find_element_by_tag_name() exception:\n{}'.format(e))
-            return []
+        return links
 
     def get_url(self,url):
         '''HTTP GET of the url, and add any embedded links.'''
         if not self.check_robots(url): return  # bail out if robots.txt says to
-        signal.signal(signal.SIGALRM, self.phantomjs_hang_handler) # register hang handler
-        signal.alarm(self.timeout+2)  # set an alarm
-        try:
-            self.session.get(url)  # selenium driver
-        except self.TimeoutError as e:
-            if self.debug: print('.get() exception:\n{}'.format(e))
-        finally:
-            signal.alarm(0)  # cancel the alarm
-        try:
-            self.data_usage += len(self.session.page_source)
-        except Exception as e:
-            if self.debug: print('.page_source exception:\n{}'.format(e))
+        @self.phantomjs_timeout
+        def phantomjs_get(): self.session.get(url)  # selenium driver
+        phantomjs_get()
+        @self.phantomjs_short_timeout
+        def phantomjs_page_source(): self.data_usage += len(self.session.page_source)
+        phantomjs_page_source()
         new_links = self.url_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
     def url_links(self):
-        '''Generic webpage link finder format.'''
+        """Generic webpage link finder format."""
+        # https://github.com/detro/ghostdriver/issues/169
+        @self.phantomjs_short_timeout
+        def phantomjs_find_elements_by_tag_name():
+            return WebDriverWait(self.session,3).until(lambda x: x.find_elements_by_tag_name('a'))
+        elements = phantomjs_find_elements_by_tag_name()
+
+        # get links in random order until max. per page
+        k = 0
+        links = []
         try:
-            # https://github.com/detro/ghostdriver/issues/169
-            elements = WebDriverWait(self.session,3).until(lambda x: x.find_elements_by_tag_name('a'))
-            return [ a.get_attribute('href') \
-                for a in elements if a.get_attribute('href') is not None ]
-        except Exception as e:
+            for a in sorted(elements,key=lambda k: random.random()):
+                @self.phantomjs_short_timeout
+                def phantomjs_get_attribute():
+                    if a.get_attribute('href') is not None:
+                        links.append(a.get_attribute('href'))
+                phantomjs_get_attribute()
+                k += 1
+                if k > self.max_links_per_page: break
+        except Exception as a:
             if self.debug: print('.get_attribute() exception:\n{}'.format(e))
-            return []
+        return links
 
     def check_robots(self,url):
         result = True
-        url_robots = uprs.urlunparse(
-        uprs.urlparse(url)._replace(scheme='https', path='/robots.txt', query='', params=''))
-        signal.signal(signal.SIGALRM, self.robot_hang_handler) # register hang handler
-#        signal.alarm(robot_timeout+1)  # set a short-term alarm a little longer than robot_timeout
-        try:
+        url_robots = uprs.urlunparse(uprs.urlparse(url)._replace(scheme='https',
+            path='/robots.txt', query='', params=''))
+        @self.robots_timeout
+        def robots_read():
             rp = RobotFileParserUserAgent()
             rp.set_url(url_robots)
             rp.read()
             result = rp.can_fetch(self.user_agent,url)
-        except (self.TimeoutError,Exception) as e:
-            if self.debug: print('rp.read() exception:\n{}'.format(e))
-        finally:
-            signal.alarm(0)  # cancel the alarm
-        del rp      # ensure self.close() in urllib
+            del rp      # ensure self.close() in urllib
+        robots_read()
         return result
 
     def add_url_links(self,links,url=''):
@@ -603,7 +627,9 @@ images, and respects robots.txt, which all provide good security.
         if self.verbose or self.debug:
             current_url = url  # default
             try:
-                current_url = self.session.current_url
+                @self.phantomjs_short_timeout
+                def phantomjs_current_url(): return self.session.current_url
+                current_url = phantomjs_current_url()
                 # the current_url method breaks on a lot of sites, e.g.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
             except Exception as e:
@@ -635,6 +661,32 @@ images, and respects robots.txt, which all provide good security.
         return running_bandwidth > self.gb_per_month
 
     # handle phantomjs timeouts
+    # configurable decorator to timeout phantomjs and robotparser calls
+    # http://stackoverflow.com/questions/15572288/general-decorator-to-wrap-try-except-in-python
+    # Syntax:
+    # phantomjs_timeout = block_timeout(phantomjs_hang_handler)
+    # @phantomjs_timeout
+    # def phantomjs_block():
+    #     # phantomjs stuff
+    #     pass
+    # phantomjs_block()
+
+    def block_timeout(self,hang_handler, alarm_time=timeout, errors=(Exception,), debug=False):
+        def decorator(func):
+            def call_func(*args, **kwargs):
+                signal.signal(signal.SIGALRM, hang_handler)  # register hang handler
+                signal.alarm(alarm_time)  # set an alarm
+                result = None
+                try:
+                    result = func(*args, **kwargs)
+                except errors as e:
+                    if debug: print('{} exception:\n{}'.format(func.__name__, e))
+                finally:
+                    signal.alarm(0)  # cancel the alarm
+                return result
+            return call_func
+        return decorator
+
     class TimeoutError(Exception):
         pass
 
@@ -650,7 +702,7 @@ images, and respects robots.txt, which all provide good security.
             raise self.TimeoutError('Unable to quit the session as well.')
         raise self.TimeoutError('phantomjs is taking too long')
 
-    def robot_hang_handler(self, signum, frame):
+    def robots_hang_handler(self, signum, frame):
         if self.debug: print('Looks like robotparser has hung.')
         raise self.TimeoutError('robotparser is taking too long')
 
@@ -681,7 +733,9 @@ images, and respects robots.txt, which all provide good security.
         after three attempts. """
         for k in range(3):    # three strikes
             try:
-                pid = self.session.service.process.pid
+                @self.phantomjs_short_timeout
+                def phantomjs_process_pid(): return self.session.service.process.pid
+                pid = phantomjs_process_pid()
                 rss_mb = psutil.Process(pid).memory_info().rss / float(2 ** 20)
                 break
             except (psutil.NoSuchProcess,Exception) as e:
