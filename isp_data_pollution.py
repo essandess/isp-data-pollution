@@ -46,6 +46,7 @@ max_links_per_domain = 400	# Maximum number of links to add per domain
 search_url = 'http://www.google.com/search'	# keep unencrypted for ISP DPI
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
 timeout = 20
+short_timeout = 3
 
 blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 # Usage of the Shalla Blacklists:
@@ -86,7 +87,6 @@ seed_bias_links = ['http://my.xfinity.com/news',
 
 # monkeypatch the read class method in RobotFileParser
 # many sites will block access to robots.txt without a standard User-Agent header
-short_timeout = 3
 class RobotFileParserUserAgent(robotparser.RobotFileParser):
 
     timeout = short_timeout  # short-term timeout
@@ -414,10 +414,7 @@ images, and respects robots.txt, which all provide good security.
 
     def exceeded_bandwidth_tasks(self):
         if self.bandwidth_test():
-            # decimate the stack and clear the cookies
-            if self.link_count() > int(np.ceil(0.81*self.max_links_cached)):
-                for url in self.draw_links(n=int(np.ceil(self.link_count()/10.))):
-                    self.pop_link()
+            self.decimate_links(total_frac=0.81,decimate_frac=0.1)
             time.sleep(120)
 
     def every_hour_tasks(self):
@@ -440,7 +437,7 @@ images, and respects robots.txt, which all provide good security.
 
     def every_day_tasks(self):
         if int(self.elapsed_time/3600. % 24.) == 23:
-            # clear out cookies every day, and seed more links
+            # clear out cookies every day, decimate, and seed more links
             if self.twentyfour_hour_trigger:
                 if hasattr(self,'session'):
                     self.seed_links()
@@ -449,6 +446,7 @@ images, and respects robots.txt, which all provide good security.
                     self.open_session()
                 else:
                     self.open_session()
+                    self.decimate_links(total_frac=0.667, decimate_frac=0.1)
                     self.seed_links()
                     if self.quit_driver_every_call: self.quit_session()
                 self.twentyfour_hour_trigger = False
@@ -460,9 +458,12 @@ images, and respects robots.txt, which all provide good security.
             # reset bw stats and (really) decimate the stack every couple of weeks
             self.start_time = time.time()
             self.data_usage = 0
-            if self.link_count() > int(np.ceil(0.49*self.max_links_cached)):
-                for url in self.draw_links(n=int(np.ceil(self.link_count()/3.))):
-                    self.pop_link(url)
+            self.decimate_links(total_frac=0.49, decimate_frac=0.333)
+
+    def decimate_links(self, total_frac=0.81, decimate_frac=0.1):  # decimate the stack
+        if self.link_count() > int(np.ceil(total_frac * self.max_links_cached)):
+            for url in self.draw_links(n=int(np.ceil(self.link_count() * decimate_frac))):
+                self.remove_link(url)
 
     def set_user_agent(self):
         global user_agent
@@ -480,8 +481,9 @@ images, and respects robots.txt, which all provide good security.
 
     def draw_links(self,n=1,log_sampling=False):
         urls = []
-        domain_count = np.array([(dmn,len(self.domain_links[dmn])) for dmn in self.domain_links])
-        p = np.array([np.float(c) for d,c in domain_count])
+        domain_array = np.array([dmn for dmn in self.domain_links])
+        domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
+        p = np.array([np.float(c) for c in domain_count])
         count_total = p.sum()
         if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
             p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
@@ -489,9 +491,9 @@ images, and respects robots.txt, which all provide good security.
             p = p/p.sum()
             cnts = npr.multinomial(n, pvals=p)
             if n > 1:
-                for k in range(len(cnts)):
-                    domain = domain_count[k][0]
-                    cnt = min(cnts[k],domain_count[k][1])
+                for k in range(cnts.shape[0]):
+                    domain = domain_array[k]
+                    cnt = min(cnts[k],domain_count[k])
                     for url in random.sample(self.domain_links[domain],cnt):
                         urls.append(url)
             else:
@@ -549,7 +551,7 @@ images, and respects robots.txt, which all provide good security.
         # https://github.com/detro/ghostdriver/issues/169
         @self.phantomjs_short_timeout
         def phantomjs_find_elements_by_css_selector():
-            return WebDriverWait(self.session, 3).until(lambda x: x.find_elements_by_css_selector('div.g'))
+            return WebDriverWait(self.session,short_timeout).until(lambda x: x.find_elements_by_css_selector('div.g'))
         elements = phantomjs_find_elements_by_css_selector()
         # get links in random order until max. per page
         k = 0
@@ -557,14 +559,16 @@ images, and respects robots.txt, which all provide good security.
         try:
             for div in sorted(elements,key=lambda k: random.random()):
                 @self.phantomjs_short_timeout
-                def phantomjs_find_element_by_tag_name():
-                    if div.find_element_by_tag_name('a').get_attribute('href') is not None:
-                        links.append(div.find_element_by_tag_name('a').get_attribute('href'))
-                phantomjs_find_element_by_tag_name()
+                def phantomjs_find_element_by_tag_name(): return div.find_element_by_tag_name('a')
+                a_tag = phantomjs_find_element_by_tag_name()
+                @self.phantomjs_short_timeout
+                def phantomjs_get_attribute(): return a_tag.get_attribute('href')
+                href = phantomjs_get_attribute()
+                if href is not None: links.append(href)
                 k += 1
                 if k > self.max_links_per_page: break
         except Exception as e:
-            if self.debug: print('.find_element_by_tag_name() exception:\n{}'.format(e))
+            if self.debug: print('.find_element_by_tag_name.get_attribute() exception:\n{}'.format(e))
         return links
 
     def get_url(self,url):
@@ -593,13 +597,12 @@ images, and respects robots.txt, which all provide good security.
         try:
             for a in sorted(elements,key=lambda k: random.random()):
                 @self.phantomjs_short_timeout
-                def phantomjs_get_attribute():
-                    if a.get_attribute('href') is not None:
-                        links.append(a.get_attribute('href'))
-                phantomjs_get_attribute()
+                def phantomjs_get_attribute(): return a.get_attribute('href')
+                href = phantomjs_get_attribute()
+                if href is not None: links.append(href)
                 k += 1
                 if k > self.max_links_per_page: break
-        except Exception as a:
+        except Exception as e:
             if self.debug: print('.get_attribute() exception:\n{}'.format(e))
         return links
 
@@ -614,7 +617,8 @@ images, and respects robots.txt, which all provide good security.
             rp.read()
             result = rp.can_fetch(self.user_agent,url)
             del rp      # ensure self.close() in urllib
-        robots_read()
+            return result
+        result = robots_read()
         return result
 
     def add_url_links(self,links,url=''):
