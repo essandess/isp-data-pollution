@@ -498,7 +498,7 @@ images, and respects robots.txt, which all provide good security.
                         urls.append(url)
             else:
                 k = int(np.nonzero(cnts)[0])
-                domain = domain_count[k][0]
+                domain = domain_array[k]
                 url = random.sample(self.domain_links[domain],1)[0]
                 urls.append(url)
         return urls
@@ -645,7 +645,7 @@ images, and respects robots.txt, which all provide good security.
 
     def print_progress(self,num_links,url,terminal_width=80):
         # truncate or fill with white space
-        text_suffix = ': +{:d} of {:d} links, H(domain) = {:.1f} b'.format(num_links,self.link_count(),self.domain_entropy())
+        text_suffix = ': +{:d}/{:d} links, H(domain)={:.1f} b'.format(num_links,self.link_count(),self.domain_entropy())
         chars_used =  2 + len(text_suffix)
         if len(url) + chars_used > terminal_width:
             url = url[:terminal_width-chars_used-1] + '…'
