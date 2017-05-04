@@ -385,7 +385,6 @@ images, and respects robots.txt, which all provide good security.
                     word = ' '.join(['"{}"'.format(' '.join(random.sample(self.words, 2))),
                                      ' '.join(random.sample(self.words, num_words-2))])
             if self.debug: print('Seeding with search for \'{}\'…'.format(word))
-            # self.add_url_links(self.websearch(word).content.decode('utf-8'))
             self.get_websearch(word)
 
     def bias_links(self):
@@ -419,16 +418,18 @@ images, and respects robots.txt, which all provide good security.
 
     def every_hour_tasks(self):
         if int(self.elapsed_time/60. % 60.) == 59:
-            # reset user agent, clear out cookies
+            # reset user agent, clear out cookies, seed more links
             if self.hour_trigger:
-                self.set_user_agent()
                 if hasattr(self,'session'):
+                    self.set_user_agent()
                     try:
                         @self.phantomjs_short_timeout
                         def phantomjs_delete_all_cookies(): self.session.delete_all_cookies()
                         phantomjs_delete_all_cookies()
                     except Exception as e:
                         if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
+                    self.seed_links()
+                else: self.open_session()
                 self.hour_trigger = False
         else:
             self.hour_trigger = True
@@ -460,9 +461,10 @@ images, and respects robots.txt, which all provide good security.
             self.data_usage = 0
             self.decimate_links(total_frac=0.49, decimate_frac=0.333)
 
-    def decimate_links(self, total_frac=0.81, decimate_frac=0.1):  # decimate the stack
+    def decimate_links(self, total_frac=0.81, decimate_frac=0.1, log_sampling=False):
+        """ Delete `decimate_frac` of links if the total exceeds `total_frac` of the maximum allowed. """
         if self.link_count() > int(np.ceil(total_frac * self.max_links_cached)):
-            for url in self.draw_links(n=int(np.ceil(self.link_count() * decimate_frac))):
+            for url in self.draw_links(n=int(np.ceil(self.link_count()*decimate_frac)),log_sampling=log_sampling):
                 self.remove_link(url)
 
     def set_user_agent(self):
