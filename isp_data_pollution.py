@@ -329,6 +329,10 @@ images, and respects robots.txt, which all provide good security.
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
     def pollute_forever(self):
+        if self.verbose: print("""Display formats:
+Downloading: website.com; NNNNN links [in library], H(domain)= B bits [entropy]
+Downloaded:  website.com: +LLL/NNNN links [added], H(domain)= B bits [entropy]
+""")
         self.open_session()
         self.seed_links()
         self.clear_session()
