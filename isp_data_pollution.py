@@ -331,7 +331,7 @@ images, and respects robots.txt, which all provide good security.
     def pollute_forever(self):
         if self.verbose: print("""Display formats:
 Downloading: website.com; NNNNN links [in library], H(domain)= B bits [entropy]
-Downloaded:  website.com: +LLL/NNNN links [added], H(domain)= B bits [entropy]
+Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
 """)
         self.open_session()
         self.seed_links()
