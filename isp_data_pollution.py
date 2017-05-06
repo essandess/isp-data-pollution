@@ -47,6 +47,8 @@ search_url = 'http://www.google.com/search'	# keep unencrypted for ISP DPI
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
 timeout = 20
 short_timeout = 3
+phantomjs_rss_limit_mb = 1024  # Default maximum meory limit of phantomjs processs (MB)
+terminal_width = 80  # tty width, standard is 80 chars; add code to adapt later
 
 blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 # Usage of the Shalla Blacklists:
@@ -113,7 +115,8 @@ class RobotFileParserUserAgent(robotparser.RobotFileParser):
 
 
 class ISPDataPollution:
-    '''Re: https://www.eff.org/deeplinks/2017/03/senate-puts-isp-profits-over-your-privacy
+    """
+    Re: https://www.eff.org/deeplinks/2017/03/senate-puts-isp-profits-over-your-privacy
  
 I pay my ISP a lot for data usage every month. I typically don't use
 all the bandwidth that I pay for.  If my ISP is going to sell my
@@ -132,7 +135,7 @@ real issue of navigating captchas when appearing as a Tor exit node.
 The crawler uses the Python requests and lxml.html libraries, is hardcoded
 to download html without javascript processing, will not download
 images, and respects robots.txt, which all provide good security.
-'''
+    """
 
     def __init__(self,gb_per_month=gb_per_month,
                  max_links_cached=max_links_cached,
@@ -143,7 +146,7 @@ images, and respects robots.txt, which all provide good security.
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
-                 timeout=timeout,
+                 timeout=timeout, diurnal_flag=True,
                  quit_driver_every_call=False,
                  blacklist=True,verbose=True):
         self.max_links_cached = max_links_cached
@@ -156,6 +159,7 @@ images, and respects robots.txt, which all provide good security.
         self.seed_bias_links = seed_bias_links
         self.blacklist = blacklist; self.verbose = verbose
         self.timeout = timeout
+        self.diurnal_flag = diurnal_flag
         self.quit_driver_every_call = quit_driver_every_call
         # self.gb_per_month = gb_per_month  # set in parseArgs
         # self.debug = debug  # set in parseArgs
@@ -180,6 +184,7 @@ images, and respects robots.txt, which all provide good security.
     def parseArgs(self):
         parser = ap.ArgumentParser()
         parser.add_argument('-bw', '--gb_per_month', help="GB per month", type=int, default=gb_per_month)
+        parser.add_argument('-mm', '--maxmemory', help="Maximum memory of phantomjs (MB); 0=>restart every link", type=int, default=phantomjs_rss_limit_mb)
         parser.add_argument('-g', '--debug', help="Debug flag", action='store_true')
         args = parser.parse_args()
         for k in args.__dict__: setattr(self,k,getattr(args,k))
@@ -188,6 +193,8 @@ images, and respects robots.txt, which all provide good security.
 
     def sanity_check_arguments(self):
         self.gb_per_month = min(2048,max(1,self.gb_per_month))  # min-max bandwidth limits
+        if self.maxmemory == 0: self.quit_driver_every_call = True
+        self.phantomjs_rss_limit_mb = min(4096,max(256,self.maxmemory))  # min-max bandwidth limits
 
     def open_session(self):
         self.quit_session()
@@ -214,7 +221,12 @@ images, and respects robots.txt, which all provide good security.
             self.session = driver
 
     def quit_session(self,hard_quit=False,pid=None):
-        ''' close, kill -9, quit, del '''
+        """
+        close, kill -9, quit, del
+        :param hard_quit: 
+        :param pid: 
+        :return: 
+        """
         # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
         if hasattr(self,'session'):
             if not hard_quit:
@@ -323,7 +335,7 @@ images, and respects robots.txt, which all provide good security.
         if self.quit_driver_every_call: self.quit_session()
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
-                if self.diurnal_cycle_test():
+                if (not self.diurnal_flag) or self.diurnal_cycle_test():
                     self.pollute()
                 else:
                     time.sleep(self.chi2_mean_std(3.,1.))
@@ -343,6 +355,7 @@ images, and respects robots.txt, which all provide good security.
             self.clear_session()
             if self.quit_driver_every_call: self.quit_session()
         url = self.pop_link()
+        if self.verbose: self.print_url(url)
         if self.quit_driver_every_call: self.open_session()
         self.get_url(url)
         self.clear_session()
@@ -404,9 +417,12 @@ images, and respects robots.txt, which all provide good security.
         return npr.uniform() < val
 
     def chi2_mean_std(self,mean=1.,std=0.1):
-        '''
+        """
         Chi-squared random variable with given mean and standard deviation.
-        '''
+        :param mean: 
+        :param std: 
+        :return: 
+        """
         scale = 2.*mean/std
         nu = mean*scale
         return npr.chisquare(nu)/scale
@@ -537,8 +553,13 @@ images, and respects robots.txt, which all provide good security.
         return '.'.join(uprs.urlparse(url).netloc.split('.')[-2:])
 
     def get_websearch(self,query):
-        '''HTTP GET of a websearch, then add any embedded links.'''
+        """
+        HTTP GET of a websearch, then add any embedded links.
+        :param query: 
+        :return: 
+        """
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
+        if self.verbose: self.print_url(url)
         @self.phantomjs_timeout
         def phantomjs_get(): self.session.get(url)  # selenium driver
         phantomjs_get()
@@ -549,7 +570,10 @@ images, and respects robots.txt, which all provide good security.
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
     def websearch_links(self):
-        '''Webpage format for a popular search engine, <div class="g">'''
+        """
+        Webpage format for a popular search engine, <div class="g">.
+        :return: 
+        """
         # https://github.com/detro/ghostdriver/issues/169
         @self.phantomjs_short_timeout
         def phantomjs_find_elements_by_css_selector():
@@ -574,7 +598,11 @@ images, and respects robots.txt, which all provide good security.
         return links
 
     def get_url(self,url):
-        '''HTTP GET of the url, and add any embedded links.'''
+        """
+        HTTP GET of the url, and add any embedded links.
+        :param url: 
+        :return: 
+        """
         if not self.check_robots(url): return  # bail out if robots.txt says to
         @self.phantomjs_timeout
         def phantomjs_get(): self.session.get(url)  # selenium driver
@@ -641,17 +669,39 @@ images, and respects robots.txt, which all provide good security.
             except Exception as e:
                 if self.debug: print('.current_url exception:\n{}'.format(e))
         if self.debug:
-            print("'{}': {:d} links added, {:d} total, {:.1f} bits domain entropy".format(current_url,k,self.link_count(),self.domain_entropy()))
+            print("{}: {:d} links added, {:d} total, {:.1f} bits domain entropy".format(current_url,k,self.link_count(),self.domain_entropy()))
         elif self.verbose:
-            self.print_progress(k,current_url)
+            self.print_progress(current_url,num_links=k)
 
-    def print_progress(self,num_links,url,terminal_width=80):
-        # truncate or fill with white space
-        text_suffix = ': +{:d}/{:d} links, H(domain)={:.1f} b'.format(num_links,self.link_count(),self.domain_entropy())
-        chars_used =  2 + len(text_suffix)
-        if len(url) + chars_used > terminal_width:
-            url = url[:terminal_width-chars_used-1] + '…'
-        text = "'{}'{}".format(url,text_suffix)
+    def print_url(self,url):
+        if self.debug: print(url + ' …')
+        else: self.print_progress(url)
+
+    def print_progress(self,url,num_links=None):
+        if num_links is not None:
+            text_suffix = ': +{:d}/{:d} links, H(domain)={:.1f} b'.format(num_links,self.link_count(),self.domain_entropy())
+        else:
+            text_suffix = ': {:d} links, H(domain)={:.1f} b …'.format(self.link_count(),self.domain_entropy())
+        self.print_truncated_line(url,text_suffix)
+
+    def print_truncated_line(self,url,text_suffix='',terminal_width=terminal_width):
+        """
+        Print truncated `url` + `text_suffix` to fill `terminal_width`
+        :param url: 
+        :param text_suffix: 
+        :param terminal_width: 
+        :return: 
+        """
+        chars_used = len(text_suffix)
+        if text_suffix == '…':
+            if len(url) >= terminal_width:
+                url = url[:terminal_width-1]  # add '…' below
+            elif len(url) < terminal_width-1:
+                url += ' '  # add an extra space before the ellipsis
+        else:
+            if len(url) + chars_used > terminal_width:
+                url = url[:terminal_width-chars_used-1] + '…'
+        text = "{}{}".format(url,text_suffix)  # added white space necessary
         text = text[:min(terminal_width,len(text))] + ' ' * max(0,terminal_width-len(text))
         print(text,end='',flush=True)
         time.sleep(0.01)
@@ -713,13 +763,16 @@ images, and respects robots.txt, which all provide good security.
         raise self.TimeoutError('robotparser is taking too long')
 
     def check_phantomjs_process(self):
-        '''Check if phantomjs is running.'''
+        """
+        Check if phantomjs is running.
+        :return: 
+        """
         # Check rss and restart if too large, then check existence
         # http://stackoverflow.com/questions/568271/how-to-check-if-there-exists-a-process-with-a-given-pid-in-python
         try:
             if not hasattr(self,'session'): self.open_session()
             pid, rss_mb = self.phantomjs_pid_and_memory()
-            if rss_mb > 1024:  # 1 GB rss limit
+            if rss_mb > self.phantomjs_rss_limit_mb:  # memory limit
                 self.quit_session(pid=pid)
                 self.open_session()
                 pid, _ = self.phantomjs_pid_and_memory()
