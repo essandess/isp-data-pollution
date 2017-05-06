@@ -142,16 +142,15 @@ I like `pip`, so on my machines I would say:
 sudo pip-3.4 install numpy requests selenium Faker
 ```
 
-I also like MacPorts for native builds, so I might also use:
+## macOS
+
+The [MacPorts](https://www.macports.org) install command is:
 
 ```
 sudo port install py34-numpy py34-requests py34-psutil phantomjs psutil
 ```
 
-Figure out how to install these libraries on your OS, and the script will run.
-
-
-This is what was necessary on macOS:
+This is what was also necessary on macOS:
 
 ```
 sudo port install phantomjs
@@ -164,15 +163,50 @@ cd /Applications/Xcode.app/Contents/Developer/usr/bin/
 sudo ln -s xcodebuild xcrun
 ```
 
-# Running on a headless computer (a computer a graphical interface)
-phantomjs requires some graphical software, virtual or otherwise, so on a headless computer, you'll need the following system package and local package.
+[Homebrew](../../../../Homebrew/brew) is another good option.
+
+## Linux [Ubuntu16]
+
+```
+sudo apt-get install git
+git clone https://github.com/essandess/isp-data-pollution.git
+cd isp-data-pollution/
+sudo apt install python3-pip
+pip3 install --upgrade pip 
+pip3 install numpy
+pip3 install psutil
+sudo -H pip3 install psutil --upgrade
+sudo -H pip3 install --upgrade pip
+sudo -H pip3 install selenium
+sudo -H pip3 install faker
+sudo apt-get install fontconfig
+sudo apt-get install libfontconfig
+sudo apt-get install build-essential chrpath libssl-dev libxft-dev
+sudo apt-get install libfreetype6 libfreetype6-dev
+sudo apt-get install libfontconfig1 libfontconfig1-dev
+
+export PHANTOM_JS="phantomjs-2.1.1-linux-x86_64"
+sudo mv $PHANTOM_JS /usr/local/share
+ls /usr/local/share
+sudo ln -sf /usr/local/share/$PHANTOM_JS/bin/phantomjs /usr/local/bin
+phantomjs --version
+python3 isp_data_pollution.py
+```
+
+If you are behind a firewall, use `sudo -EH` to inherit `http_proxy` environment settings.
+
+## Headless
+
+`phantomjs` requires some graphical software, virtual or otherwise, so on a headless computer, you'll need the following system package and local package.
+
 If you're not using virtualenv (below) then run pip as sudo.
+
 ```
 sudo apt-get install xvfb
 pip install pyvirtualdisplay
 ```
 
-# Installation through virtualenv
+### Installation through virtualenv
 
 In order to isolate pip library files, virtualenv is convenient. If you prefer this method, you can follow the steps below:
 ```
