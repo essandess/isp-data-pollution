@@ -681,7 +681,7 @@ images, and respects robots.txt, which all provide good security.
         if num_links is not None:
             text_suffix = ': +{:d}/{:d} links, H(domain)={:.1f} b'.format(num_links,self.link_count(),self.domain_entropy())
         else:
-            text_suffix = ': {:d} links, H(domain)={:.1f} b …'.format(self.link_count(),self.domain_entropy())
+            text_suffix = '; {:d} links, H(domain)={:.1f} b …'.format(self.link_count(),self.domain_entropy())
         self.print_truncated_line(url,text_suffix)
 
     def print_truncated_line(self,url,text_suffix='',terminal_width=terminal_width):
