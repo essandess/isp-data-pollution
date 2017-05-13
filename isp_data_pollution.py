@@ -768,10 +768,10 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         # https://github.com/detro/ghostdriver/issues/334
         # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
         if self.debug: print('Looks like phantomjs has hung.')
-        @self.phantomjs_quit_timeout
-        def phantomjs_quit_session():
+        try:
             self.quit_session(phantomjs_short_timeout_decorator=self.phantomjs_quit_timeout)
-        phantomjs_quit_session()
+        except Exception as e:
+            if self.debug: print(e)
         self.open_session()
 
     def phantomjs_quit_hang_handler(self, signum, frame):
