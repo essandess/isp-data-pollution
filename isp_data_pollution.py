@@ -771,7 +771,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         @self.phantomjs_quit_timeout
         def phantomjs_quit_session():
             self.quit_session(phantomjs_short_timeout_decorator=self.phantomjs_quit_timeout)
-        phantomjs_session_quit()
+        phantomjs_quit_session()
         self.open_session()
 
     def phantomjs_quit_hang_handler(self, signum, frame):
