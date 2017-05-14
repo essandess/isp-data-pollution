@@ -19,7 +19,7 @@ __author__ = 'stsmith'
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '1.0'
+__version__ = '1.1'
 
 import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, sys, tarfile, time
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
@@ -150,6 +150,7 @@ images, and respects robots.txt, which all provide good security.
                  timeout=timeout, diurnal_flag=True,
                  quit_driver_every_call=False,
                  blacklist=True,verbose=True):
+        print('This is ISP Data Pollution 🐙💨, Version {}'.format(__version__))
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
         self.max_links_per_domain = max_links_per_domain
@@ -174,6 +175,7 @@ images, and respects robots.txt, which all provide good security.
             alarm_time=short_timeout+1,errors=(self.TimeoutError,Exception), debug=self.debug)
         self.robots_timeout = self.block_timeout(self.robots_hang_handler, \
             alarm_time=short_timeout+1,errors=(self.TimeoutError,), debug=self.debug)
+        self.check_phantomjs_version()
         self.fake = Factory.create()
         self.hour_trigger = True
         self.twentyfour_hour_trigger = True
@@ -182,7 +184,6 @@ images, and respects robots.txt, which all provide good security.
         self.data_usage = 0
         self.get_blacklist()
         self.get_random_words()
-        print('This is ISP Data Pollution 🐙💨, Version {}'.format(__version__))
         self.pollute_forever()
 
     def parseArgs(self):
@@ -190,7 +191,7 @@ images, and respects robots.txt, which all provide good security.
         parser.add_argument('-bw', '--gb_per_month', help="GB per month", type=int, default=gb_per_month)
         parser.add_argument('-mm', '--maxmemory',
             help="Maximum memory of phantomjs (MB); 0=>restart every link",
-            type=int, default=0)
+            type=int, default=1024)
         # parser.add_argument('-P', '--phantomjs-binary-path', help="Path to phantomjs binary", type=int, default=phantomjs_rss_limit_mb)
         parser.add_argument('-g', '--debug', help="Debug flag", action='store_true')
         args = parser.parse_args()
@@ -202,6 +203,21 @@ images, and respects robots.txt, which all provide good security.
         self.gb_per_month = min(2048,max(1,self.gb_per_month))  # min-max bandwidth limits
         if self.maxmemory == 0: self.quit_driver_every_call = True
         self.phantomjs_rss_limit_mb = min(4096,max(256,self.maxmemory))  # min-max bandwidth limits
+
+    def check_phantomjs_version(self,recommended_version=(2,1)):
+        self.open_session()
+        if self.debug:
+            print("{} version is {}, {} version is {}".format(self.session.capabilities["browserName"],
+                                                              self.session.capabilities["version"],
+                                                              self.session.capabilities["driverName"],
+                                                              self.session.capabilities["driverVersion"]))
+        phantomjs_version = tuple(int(i) for i in self.session.capabilities["version"].split('.'))
+        if phantomjs_version < recommended_version:
+            print("""{} version is {};
+please upgrade to at least version {} from http://phantomjs.org.
+""".format(self.session.capabilities["browserName"],self.session.capabilities["version"],
+           '.'.join(str(i) for i in recommended_version)))
+        self.quit_session()
 
     def open_session(self):
         self.quit_session()
@@ -356,6 +372,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 if npr.uniform() < 0.005: self.set_user_agent()  # reset the user agent occasionally
                 self.elapsed_time = time.time() - self.start_time
                 self.exceeded_bandwidth_tasks()
+                self.random_interval_tasks()
                 self.every_hour_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
             except Exception as e:
@@ -446,6 +463,16 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
             self.decimate_links(total_frac=0.81,decimate_frac=0.1)
             time.sleep(120)
 
+    def random_interval_tasks(self,random_interval=None):
+        if random_interval is None: random_interval = self.chi2_mean_std(2*3600.,3600.)
+        def init_random_time():
+            self.random_start_time = time.time()
+            self.random_interval = self.random_start_time + random_interval
+        if not hasattr(self,'random_interval'): init_random_time()
+        if time.time() > self.random_interval:
+            init_random_time()  # reinitialize random interval
+            self.current_preferred_domain = self.draw_domain()
+
     def every_hour_tasks(self):
         if int(self.elapsed_time/60. % 60.) == 59:
             # reset user agent, clear out cookies, seed more links
@@ -513,9 +540,11 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
             if self.debug: print('.update() exception:\n{}'.format(e))
 
     def draw_link(self,log_sampling=True):
+        """ Draw a single, random link. """
         return self.draw_links(n=1,log_sampling=log_sampling)[0]
 
     def draw_links(self,n=1,log_sampling=False):
+        """ Draw multiple random links. """
         urls = []
         domain_array = np.array([dmn for dmn in self.domain_links])
         domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
@@ -539,9 +568,39 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 urls.append(url)
         return urls
 
-    def pop_link(self):
-        url = self.draw_link()
-        if npr.uniform() < 0.95:  # 95% 1 GET, ~5% 2 GETs, .2% three GETs
+    def draw_domain(self,log_sampling=False):
+        """ Draw a single, random domain. """
+        domain = None
+        domain_array = np.array([dmn for dmn in self.domain_links])
+        domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
+        p = np.array([np.float(c) for c in domain_count])
+        count_total = p.sum()
+        if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
+            p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
+        if count_total > 0:
+            p = p/p.sum()
+            cnts = npr.multinomial(1, pvals=p)
+            k = int(np.nonzero(cnts)[0])
+            domain = domain_array[k]
+        return domain
+
+    def draw_link_from_domain(self,domain):
+        """ Draw a single, random link from a specific domain. """
+        domain_count = len(self.domain_links.get(domain,set()))
+        url = random.sample(self.domain_links[domain],1)[0] if domain_count > 0 else None
+        return url
+
+    def pop_link(self,remove_link_fraction=0.95,current_preferred_domain_fraction=0.1):
+        """ Pop a link from the collected list.
+If `self.current_preferred_domain` is defined, then a link from this domain is drawn
+a fraction of the time. """
+        url = None
+        if hasattr(self,'current_preferred_domain') and npr.uniform() < current_preferred_domain_fraction:
+            while url is not None:  # loop until `self.current_preferred_domain` has a url
+                url = self.draw_link_from_domain(self.current_preferred_domain)
+                if url is None: self.current_preferred_domain = self.draw_domain()
+        if url is None: url = self.draw_link()
+        if npr.uniform() < remove_link_fraction:  # 95% 1 GET, ~5% 2 GETs, .2% three GETs
             self.remove_link(url)  # pop a random item from the stack
         return url
 
