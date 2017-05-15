@@ -109,19 +109,16 @@ Connection: keep-alive
 
 # Example crawl
 
-A fews seconds of random crawling looks like this:
+After a while of random crawling looks like this:
 
 ```
-Added 1 links, 29045 total at url 'https://www.diapers.com/l/best-gifts-for-mom?ref=b_scf_leg_best_gifts_for_mom&icn=b_scf_leg&ici=best_gifts_for_mom'.
-Added 1 links, 29045 total at url 'http://bananarepublic.gap.eu/browse/category.do?cid=1025790'.
-Added 200 links, 29244 total at url 'http://www.bananarepublic.ca/products/mens-suits.jsp'.
-Added 1 links, 29244 total at url 'http://cyworld.com.cy/en/jurisdictions/estonia7'.
-Added 1 links, 29244 total at url 'http://bananarepublic.gap.eu/browse/category.do?cid=1025788'.
-Added 2 links, 29245 total at url 'https://www.osti.gov/scitech/biblio/1337873-cyber-threat-vulnerability-analysis-electric-sector'.
-Added 1 links, 29245 total at url 'https://www.amazon.com/30th-Anniversary-Collection-Time-Greatest/dp/B00000334E/ref=sr_1_9/153-5801643-0200824?ie=UTF8&qid=1491060352&sr=8-9&keywords=Paul+Anka'.
-Added 40 links, 29284 total at url 'http://www.bendixking.com/Products/Displays'.
-Added 1 links, 29284 total at url 'http://www.thefreedictionary.com/arid'.
-Added 47 links, 29330 total at url 'http://www2.beltrailway.com/unemployment-sickness-benefits-for-railroad-employees/'.
+This is ISP Data Pollution 🐙💨, Version 1.1
+Downloading the blacklist… done.
+Display format:
+Downloading: website.com; NNNNN links [in library], H(domain)= B bits [entropy]
+Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
+
+http://eponymousflower.blogspot.com/2017/02/lu…: +6/32349 links, H(domain)=6.8 b
 ```
 
 The screenshot of a randomly crawled web page looks like this. Note that there are no downloaded images.
@@ -139,15 +136,19 @@ This involves choosing a Python (v. 3) package manager, typically `pip` or `Anac
 I like `pip`, so on my machines I would say:
 
 ```
-sudo pip-3.4 install numpy requests selenium Faker
+sudo pip-3.4 install numpy requests selenium Faker OpenSSL
 ```
+
+## PhantomJS
+
+It is recommended that the `phantomjs` binary be installed directly from [phantomjs.org](http://phantomjs.org/download.html). Be sure to verify the [checksum](http://phantomjs.org/download.html#checksums) of the downloaded installation.
 
 ## macOS
 
 The [MacPorts](https://www.macports.org) install command is:
 
 ```
-sudo port install py34-numpy py34-requests py34-psutil phantomjs psutil
+sudo port install py34-numpy py34-requests py34-psutil py34-openssl phantomjs psutil
 ```
 
 This is what was also necessary on macOS:
