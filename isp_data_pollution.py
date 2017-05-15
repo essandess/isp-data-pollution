@@ -21,13 +21,20 @@ __author__ = 'stsmith'
 
 __version__ = '1.1'
 
-import argparse as ap, datetime as dt, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, sys, tarfile, time
+import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, sys, tarfile, time, warnings as warn
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from io import BytesIO
 from faker import Factory
+
+# ensure pyopenssl exists to address SNI support
+# https://stackoverflow.com/questions/18578439/using-requests-with-tls-doesnt-give-sni-support/18579484#18579484
+if importlib.util.find_spec('OpenSSL') is None:
+    msg = 'Use the pyopenssl package to enable SNI support for TLS-protected hosted domains.'
+    print(msg)
+    warn.warn(msg)
 
 # headless Raspberry Pi
 try:
@@ -213,7 +220,7 @@ images, and respects robots.txt, which all provide good security.
                                                               self.session.capabilities["driverVersion"]))
         phantomjs_version = tuple(int(i) for i in self.session.capabilities["version"].split('.'))
         if phantomjs_version < recommended_version:
-            print("""{} version is {};
+            warn.warn("""{} version is {};
 please upgrade to at least version {} from http://phantomjs.org.
 """.format(self.session.capabilities["browserName"],self.session.capabilities["version"],
            '.'.join(str(i) for i in recommended_version)))
@@ -596,7 +603,7 @@ If `self.current_preferred_domain` is defined, then a link from this domain is d
 a fraction of the time. """
         url = None
         if hasattr(self,'current_preferred_domain') and npr.uniform() < current_preferred_domain_fraction:
-            while url is not None:  # loop until `self.current_preferred_domain` has a url
+            while url is not None and len(self.domain_links) > 0:  # loop until `self.current_preferred_domain` has a url
                 url = self.draw_link_from_domain(self.current_preferred_domain)
                 if url is None: self.current_preferred_domain = self.draw_domain()
         if url is None: url = self.draw_link()
