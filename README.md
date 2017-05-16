@@ -180,6 +180,7 @@ sudo -H pip3 install psutil --upgrade
 sudo -H pip3 install --upgrade pip
 sudo -H pip3 install selenium
 sudo -H pip3 install faker
+sudo -H pip3 install pyopenssl
 sudo apt-get install fontconfig
 sudo apt-get install libfontconfig
 sudo apt-get install build-essential chrpath libssl-dev libxft-dev
