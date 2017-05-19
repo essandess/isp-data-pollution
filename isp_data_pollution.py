@@ -213,7 +213,7 @@ images, and respects robots.txt, which all provide good security.
         self.phantomjs_rss_limit_mb = min(4096,max(256,self.maxmemory))  # min-max bandwidth limits
 
     def check_phantomjs_version(self,recommended_version=(2,1)):
-        self.open_session()
+        self.open_driver()
         if self.debug:
             print("{} version is {}, {} version is {}".format(self.driver.capabilities["browserName"],
                                                               self.driver.capabilities["version"],
@@ -225,12 +225,12 @@ images, and respects robots.txt, which all provide good security.
 please upgrade to at least version {} from http://phantomjs.org.
 """.format(self.driver.capabilities["browserName"],self.driver.capabilities["version"],
            '.'.join(str(i) for i in recommended_version)))
-        self.quit_session()
+        self.quit_driver()
 
-    def open_session(self):
-        self.quit_session()
-        if not hasattr(self, 'session') or not isinstance(self.driver,webdriver.phantomjs.webdriver.WebDriver):
-            # phantomjs session
+    def open_driver(self):
+        self.quit_driver()
+        if not hasattr(self, 'driver') or not isinstance(self.driver,webdriver.phantomjs.webdriver.WebDriver):
+            # phantomjs driver
             # http://engineering.shapesecurity.com/2015/01/detecting-phantomjs-based-visitors.html
             # https://coderwall.com/p/9jgaeq/set-phantomjs-user-agent-string
             # http://phantomjs.org/api/webpage/property/settings.html
@@ -258,7 +258,7 @@ please upgrade to at least version {} from http://phantomjs.org.
             driver.set_script_timeout(self.timeout)
             self.driver = driver
 
-    def quit_session(self,hard_quit=False,pid=None,phantomjs_short_timeout_decorator=None):
+    def quit_driver(self,hard_quit=False,pid=None,phantomjs_short_timeout_decorator=None):
         """
         close, kill -9, quit, del
         :param hard_quit: 
@@ -268,7 +268,7 @@ please upgrade to at least version {} from http://phantomjs.org.
         # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
         if phantomjs_short_timeout_decorator is None:
             phantomjs_short_timeout_decorator = self.phantomjs_short_timeout
-        if hasattr(self,'session'):
+        if hasattr(self,'driver'):
             if not hard_quit:
                 @phantomjs_short_timeout_decorator
                 def phantomjs_close(): self.driver.close()
@@ -296,9 +296,9 @@ please upgrade to at least version {} from http://phantomjs.org.
                 if self.debug: print('.quit() exception:\n{}'.format(e))
             del self.driver
 
-    def clear_session(self):
+    def clear_driver(self):
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
-        if hasattr(self, 'session'):
+        if hasattr(self, 'driver'):
             try:
                 @self.phantomjs_short_timeout
                 def phantomjs_delete_all_cookies(): self.driver.delete_all_cookies()
@@ -373,10 +373,10 @@ please upgrade to at least version {} from http://phantomjs.org.
 Downloading: website.com; NNNNN links [in library], H(domain)= B bits [entropy]
 Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
 """)
-        self.open_session()
+        self.open_driver()
         self.seed_links()
-        self.clear_session()
-        if self.quit_driver_every_call: self.quit_session()
+        self.clear_driver()
+        if self.quit_driver_every_call: self.quit_driver()
         while True: # pollute forever, pausing only to meet the bandwidth requirement
             try:
                 if (not self.diurnal_flag) or self.diurnal_cycle_test():
@@ -395,16 +395,16 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
     def pollute(self):
         if not self.quit_driver_every_call: self.check_phantomjs_process()
         if self.link_count() < 2000:
-            if self.quit_driver_every_call: self.open_session()
+            if self.quit_driver_every_call: self.open_driver()
             self.seed_links()
-            self.clear_session()
-            if self.quit_driver_every_call: self.quit_session()
+            self.clear_driver()
+            if self.quit_driver_every_call: self.quit_driver()
         url = self.pop_link()
         if self.verbose: self.print_url(url)
-        if self.quit_driver_every_call: self.open_session()
+        if self.quit_driver_every_call: self.open_driver()
         self.get_url(url)
-        self.clear_session()
-        if self.quit_driver_every_call: self.quit_session()
+        self.clear_driver()
+        if self.quit_driver_every_call: self.quit_driver()
 
     def link_count(self):
         return int(np.array([len(self.domain_links[dmn]) for dmn in self.domain_links]).sum())
@@ -491,11 +491,11 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         if int(self.elapsed_time/60. % 60.) == 59:
             # reset user agent, clear out cookies, seed more links
             if self.hour_trigger:
-                if hasattr(self,'session'):
+                if hasattr(self,'driver'):
                     self.set_user_agent()
                     if True:
-                        self.quit_session()
-                        self.open_session()
+                        self.quit_driver()
+                        self.open_driver()
                     else:
                         try:
                             @self.phantomjs_short_timeout
@@ -504,7 +504,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                         except Exception as e:
                             if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
                     self.seed_links()
-                else: self.open_session()
+                else: self.open_driver()
                 self.hour_trigger = False
         else:
             self.hour_trigger = True
@@ -515,16 +515,16 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         if int(self.elapsed_time/3600. % 24.) == 23:
             # clear out cookies every day, decimate, and seed more links
             if self.twentyfour_hour_trigger:
-                if hasattr(self,'session'):
+                if hasattr(self,'driver'):
                     self.seed_links()
-                    # restart the session
-                    self.quit_session()
-                    self.open_session()
+                    # restart the driver
+                    self.quit_driver()
+                    self.open_driver()
                 else:
-                    self.open_session()
+                    self.open_driver()
                     self.decimate_links(total_frac=0.667, decimate_frac=0.1)
                     self.seed_links()
-                    if self.quit_driver_every_call: self.quit_session()
+                    if self.quit_driver_every_call: self.quit_driver()
                 self.twentyfour_hour_trigger = False
         else:
             self.twentyfour_hour_trigger = True
@@ -842,10 +842,10 @@ a fraction of the time. """
         # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
         if self.debug: print('Looks like phantomjs has hung.')
         try:
-            self.quit_session(phantomjs_short_timeout_decorator=self.phantomjs_quit_timeout)
+            self.quit_driver(phantomjs_short_timeout_decorator=self.phantomjs_quit_timeout)
         except Exception as e:
             if self.debug: print(e)
-        self.open_session()
+        self.open_driver()
 
     def phantomjs_quit_hang_handler(self, signum, frame):
         raise self.TimeoutError('phantomjs .quit method is taking too long')
@@ -862,11 +862,11 @@ a fraction of the time. """
         # Check rss and restart if too large, then check existence
         # http://stackoverflow.com/questions/568271/how-to-check-if-there-exists-a-process-with-a-given-pid-in-python
         try:
-            if not hasattr(self,'session'): self.open_session()
+            if not hasattr(self,'driver'): self.open_driver()
             pid, rss_mb = self.phantomjs_pid_and_memory()
             if rss_mb > self.phantomjs_rss_limit_mb:  # memory limit
-                self.quit_session(pid=pid)
-                self.open_session()
+                self.quit_driver(pid=pid)
+                self.open_driver()
                 pid, _ = self.phantomjs_pid_and_memory()
             # check existence
             os.kill(pid, 0)
@@ -891,8 +891,8 @@ a fraction of the time. """
                 break
             except (psutil.NoSuchProcess,Exception) as e:
                 if self.debug: print('.service.process.pid exception:\n{}'.format(e))
-                self.quit_session(pid=pid)
-                self.open_session()
+                self.quit_driver(pid=pid)
+                self.open_driver()
         else:  # throw in the towel and exit if no viable phantomjs process after multiple attempts
             sys.exit()
         return (pid, rss_mb)
