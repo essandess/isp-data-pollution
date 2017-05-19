@@ -199,7 +199,8 @@ images, and respects robots.txt, which all provide good security.
         parser.add_argument('-mm', '--maxmemory',
             help="Maximum memory of phantomjs (MB); 0=>restart every link",
             type=int, default=1024)
-        # parser.add_argument('-P', '--phantomjs-binary-path', help="Path to phantomjs binary", type=int, default=phantomjs_rss_limit_mb)
+        parser.add_argument('-P', '--phantomjs-binary-path', help="Path to phantomjs binary", type=str, default=None)
+        parser.add_argument('-p', '--proxy', help="Proxy for phantomjs", type=str, default=None)
         parser.add_argument('-g', '--debug', help="Debug flag", action='store_true')
         args = parser.parse_args()
         for k in args.__dict__: setattr(self,k,getattr(args,k))
@@ -214,21 +215,21 @@ images, and respects robots.txt, which all provide good security.
     def check_phantomjs_version(self,recommended_version=(2,1)):
         self.open_session()
         if self.debug:
-            print("{} version is {}, {} version is {}".format(self.session.capabilities["browserName"],
-                                                              self.session.capabilities["version"],
-                                                              self.session.capabilities["driverName"],
-                                                              self.session.capabilities["driverVersion"]))
-        phantomjs_version = tuple(int(i) for i in self.session.capabilities["version"].split('.'))
+            print("{} version is {}, {} version is {}".format(self.driver.capabilities["browserName"],
+                                                              self.driver.capabilities["version"],
+                                                              self.driver.capabilities["driverName"],
+                                                              self.driver.capabilities["driverVersion"]))
+        phantomjs_version = tuple(int(i) for i in self.driver.capabilities["version"].split('.'))
         if phantomjs_version < recommended_version:
             warn.warn("""{} version is {};
 please upgrade to at least version {} from http://phantomjs.org.
-""".format(self.session.capabilities["browserName"],self.session.capabilities["version"],
+""".format(self.driver.capabilities["browserName"],self.driver.capabilities["version"],
            '.'.join(str(i) for i in recommended_version)))
         self.quit_session()
 
     def open_session(self):
         self.quit_session()
-        if not hasattr(self, 'session') or not isinstance(self.session,webdriver.phantomjs.webdriver.WebDriver):
+        if not hasattr(self, 'session') or not isinstance(self.driver,webdriver.phantomjs.webdriver.WebDriver):
             # phantomjs session
             # http://engineering.shapesecurity.com/2015/01/detecting-phantomjs-based-visitors.html
             # https://coderwall.com/p/9jgaeq/set-phantomjs-user-agent-string
@@ -236,7 +237,6 @@ please upgrade to at least version {} from http://phantomjs.org.
             # http://stackoverflow.com/questions/23390974/phantomjs-keeping-cache
             dcap = dict(DesiredCapabilities.PHANTOMJS)
             # dcap['browserName'] = 'Chrome'
-            # if hasattr(self,'phantomjs_binary_path'): dcap['phantomjs.binary.path'] = ( self.phantomjs_binary_path )
             dcap['phantomjs.page.settings.userAgent'] = ( self.user_agent )
             dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
             dcap['phantomjs.page.settings.clearMemoryCaches'] = ( 'true' )
@@ -245,12 +245,18 @@ please upgrade to at least version {} from http://phantomjs.org.
             dcap['applicationCacheEnabled'] = ( True )
             dcap['handlesAlerts'] = ( False )
             dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
-            driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=['--disk-cache=false','--ignore-ssl-errors=false','--ssl-protocol=TLSv1.2'])
-            # if hasattr(self,'phantomjs_binary_path'): driver.capabilities.setdefault("phantomjs.binary.path", self.phantomjs_binary_path)
+            phantomjs_service_args = ['--disk-cache=false','--ignore-ssl-errors=false','--ssl-protocol=TLSv1.2']
+            if self.proxy is not None:
+                phantomjs_service_args = ['--proxy={}'.format(self.proxy)] + phantomjs_service_args
+            if self.phantomjs_binary_path is None:
+                driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=phantomjs_service_args)
+            else:
+                driver = webdriver.PhantomJS(self.phantomjs_binary_path,desired_capabilities=dcap,service_args=phantomjs_service_args)
             driver.set_window_size(1296,1018)   # Tor browser size on Linux
-            driver.implicitly_wait(self.timeout+10)
-            driver.set_page_load_timeout(self.timeout+10)
-            self.session = driver
+            driver.implicitly_wait(self.timeout)
+            driver.set_page_load_timeout(self.timeout)
+            driver.set_script_timeout(self.timeout)
+            self.driver = driver
 
     def quit_session(self,hard_quit=False,pid=None,phantomjs_short_timeout_decorator=None):
         """
@@ -265,44 +271,45 @@ please upgrade to at least version {} from http://phantomjs.org.
         if hasattr(self,'session'):
             if not hard_quit:
                 @phantomjs_short_timeout_decorator
-                def phantomjs_close(): self.session.close()
+                def phantomjs_close(): self.driver.close()
                 phantomjs_close()
             try:
                 @phantomjs_short_timeout_decorator
-                def phantomjs_send_signal(): self.session.service.process.send_signal(signal.SIGTERM)
+                def phantomjs_send_signal(): self.driver.service.process.send_signal(signal.SIGTERM)
                 phantomjs_send_signal()
             except Exception as e:
                 if self.debug: print('.send_signal() exception:\n{}'.format(e))
-                try:
-                    if pid is None: pid, _ = self.phantomjs_pid_and_memory()
-                except Exception as e:
-                    if self.debug: print('.phantomjs_pid_and_memory() exception:\n{}'.format(e))
-                try:
-                    os.kill(pid, signal.SIGTERM)  # overkill (pun intended)
-                except Exception as e:
-                    if self.debug: print('.kill() exception:\n{}'.format(e))
+                if pid is None:
+                    @phantomjs_short_timeout_decorator
+                    def phantomjs_process_pid(): return self.driver.service.process.pid
+                    pid = phantomjs_process_pid()
+                if isinstance(pid,int):
+                    try:
+                        os.kill(pid, signal.SIGTERM)  # overkill (pun intended)
+                    except Exception as e:
+                        if self.debug: print('.kill() exception:\n{}'.format(e))
             try:
                 @phantomjs_short_timeout_decorator
-                def phantomjs_quit(): self.session.quit()
+                def phantomjs_quit(): self.driver.quit()
                 phantomjs_quit()
             except Exception as e:
                 if self.debug: print('.quit() exception:\n{}'.format(e))
-            del self.session
+            del self.driver
 
     def clear_session(self):
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
         if hasattr(self, 'session'):
             try:
                 @self.phantomjs_short_timeout
-                def phantomjs_delete_all_cookies(): self.session.delete_all_cookies()
+                def phantomjs_delete_all_cookies(): self.driver.delete_all_cookies()
                 phantomjs_delete_all_cookies()
             except Exception as e:
                 if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
             try:
                 @self.phantomjs_short_timeout
                 def phantomjs_clear():
-                    self.session.execute_script('window.localStorage.clear();')
-                    self.session.execute_script('window.sessionStorage.clear();')
+                    self.driver.execute_script('window.localStorage.clear();')
+                    self.driver.execute_script('window.sessionStorage.clear();')
                 phantomjs_clear()
             except Exception as e:
                 if self.debug: print('.execute_script() exception:\n{}'.format(e))
@@ -492,7 +499,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                     else:
                         try:
                             @self.phantomjs_short_timeout
-                            def phantomjs_delete_all_cookies(): self.session.delete_all_cookies()
+                            def phantomjs_delete_all_cookies(): self.driver.delete_all_cookies()
                             phantomjs_delete_all_cookies()
                         except Exception as e:
                             if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
@@ -541,7 +548,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         try:
             @self.phantomjs_short_timeout
             def phantomjs_capabilities_update():
-                self.session.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
+                self.driver.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
             phantomjs_capabilities_update()
         except Exception as e:
             if self.debug: print('.update() exception:\n{}'.format(e))
@@ -645,10 +652,10 @@ a fraction of the time. """
         url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
         if self.verbose: self.print_url(url)
         @self.phantomjs_timeout
-        def phantomjs_get(): self.session.get(url)  # selenium driver
+        def phantomjs_get(): self.driver.get(url)  # selenium driver
         phantomjs_get()
         @self.phantomjs_short_timeout
-        def phantomjs_page_source(): self.data_usage += len(self.session.page_source)
+        def phantomjs_page_source(): self.data_usage += len(self.driver.page_source)
         phantomjs_page_source()
         new_links = self.websearch_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
@@ -661,7 +668,7 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.phantomjs_short_timeout
         def phantomjs_find_elements_by_css_selector():
-            return WebDriverWait(self.session,short_timeout).until(lambda x: x.find_elements_by_css_selector('div.g'))
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_css_selector('div.g'))
         elements = phantomjs_find_elements_by_css_selector()
         # get links in random order until max. per page
         k = 0
@@ -676,7 +683,7 @@ a fraction of the time. """
                 href = phantomjs_get_attribute()
                 if href is not None: links.append(href)
                 k += 1
-                if k > self.max_links_per_page: break
+                if k > self.max_links_per_page or self.link_count() == self.max_links_cached: break
         except Exception as e:
             if self.debug: print('.find_element_by_tag_name.get_attribute() exception:\n{}'.format(e))
         return links
@@ -689,10 +696,10 @@ a fraction of the time. """
         """
         if not self.check_robots(url): return  # bail out if robots.txt says to
         @self.phantomjs_timeout
-        def phantomjs_get(): self.session.get(url)  # selenium driver
+        def phantomjs_get(): self.driver.get(url)  # selenium driver
         phantomjs_get()
         @self.phantomjs_short_timeout
-        def phantomjs_page_source(): self.data_usage += len(self.session.page_source)
+        def phantomjs_page_source(): self.data_usage += len(self.driver.page_source)
         phantomjs_page_source()
         new_links = self.url_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
@@ -702,7 +709,7 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.phantomjs_short_timeout
         def phantomjs_find_elements_by_tag_name():
-            return WebDriverWait(self.session,3).until(lambda x: x.find_elements_by_tag_name('a'))
+            return WebDriverWait(self.driver,3).until(lambda x: x.find_elements_by_tag_name('a'))
         elements = phantomjs_find_elements_by_tag_name()
 
         # get links in random order until max. per page
@@ -715,7 +722,7 @@ a fraction of the time. """
                 href = phantomjs_get_attribute()
                 if href is not None: links.append(href)
                 k += 1
-                if k > self.max_links_per_page: break
+                if k > self.max_links_per_page or self.link_count() == self.max_links_cached: break
         except Exception as e:
             if self.debug: print('.get_attribute() exception:\n{}'.format(e))
         return links
@@ -746,7 +753,7 @@ a fraction of the time. """
             current_url = url  # default
             try:
                 @self.phantomjs_short_timeout
-                def phantomjs_current_url(): return self.session.current_url
+                def phantomjs_current_url(): return self.driver.current_url
                 current_url = phantomjs_current_url()
                 # the current_url method breaks on a lot of sites, e.g.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
@@ -878,7 +885,7 @@ a fraction of the time. """
         for k in range(3):    # three strikes
             try:
                 @self.phantomjs_short_timeout
-                def phantomjs_process_pid(): return self.session.service.process.pid
+                def phantomjs_process_pid(): return self.driver.service.process.pid
                 pid = phantomjs_process_pid()
                 rss_mb = psutil.Process(pid).memory_info().rss / float(2 ** 20)
                 break
