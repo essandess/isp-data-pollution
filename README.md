@@ -166,7 +166,19 @@ sudo ln -s xcodebuild xcrun
 
 [Homebrew](../../../../Homebrew/brew) is another good option.
 
-## Linux [Ubuntu16]
+## Linux
+
+### CentOS
+
+```
+sudo yum -y install https://centos7.iuscommunity.org/ius-release.rpm
+sudo yum -y groupinstall development
+sudo yum -y install python34 python34-pip python34-devel python34-pyflakes openssl-devel
+sudo pip3 install --upgrade pip
+sudo pip3 install numpy psutil requests selenium faker pyopenssl
+```
+
+### Ubuntu16
 
 ```
 sudo apt-get install git
