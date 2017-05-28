@@ -144,7 +144,7 @@ SafeBing = SafeWebSearch(search_url='http://www.bing.com/search',
                 safe_parameter='adlt=strict',css_selector='li.b_algo')
 yahoo_search_reprog = re.compile(r'/RU=(.+?)/R[A-Z]=')
 SafeYahoo = SafeWebSearch(search_url='http://search.yahoo.com/search', query_parameter='p',
-                safe_parameter='adlt=strict',css_selector='div.compTitle',
+                safe_parameter='vm=r',css_selector='div.compTitle',
                 result_extraction=lambda x: yahoo_search_reprog.findall(uprs.parse_qs(x)['_ylu'][0])[0])
 SafeDuckDuckGo = SafeWebSearch(search_url='http://www.duckduckgo.com/',
                 safe_parameter='kp=1',css_selector='div.result__body')
