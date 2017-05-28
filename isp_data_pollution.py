@@ -19,9 +19,9 @@ __author__ = 'stsmith'
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '1.1'
+__version__ = '1.2'
 
-import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, requests, signal, sys, tarfile, time, warnings as warn
+import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, re, requests, signal, sys, tarfile, time, warnings as warn
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
@@ -51,7 +51,6 @@ gb_per_month = 50		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
 max_links_per_page = 200	# Maximum number of links to add per page
 max_links_per_domain = 400	# Maximum number of links to add per domain
-search_url = 'http://www.google.com/search'	# keep unencrypted for ISP DPI
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
 timeout = 20
 short_timeout = 3
@@ -121,6 +120,34 @@ class RobotFileParserUserAgent(robotparser.RobotFileParser):
 # 1. The bandwidth usage is undoubtedly (much) smaller because gzip encoding is used
 # 2. A lightweight proxy could be used for accurate bandwidth, and header editing
 
+# Safe search options
+class SafeWebSearch():
+    """ Safe web search class with default Google parameters. 
+Use unencrypted HTTP for ISP DPI.
+"""
+    def __init__(self,
+            search_url='http://www.google.com/search',  # search engine
+            query_parameter='q',                        # query parameter
+            safe_parameter='safe=active',               # query parameter for safe searches
+            css_selector='div.g',                       # css selector to harvest search results
+            additional_parameters='',                   # additional parameters required to get results
+            result_extraction=lambda x: x):             # function to extract the link
+        self.search_url = search_url
+        self.query_parameter = query_parameter
+        self.safe_parameter = safe_parameter
+        self.css_selector = css_selector
+        self.additional_parameters = additional_parameters
+        self.result_extraction = result_extraction
+
+SafeGoogle = SafeWebSearch()
+SafeBing = SafeWebSearch(search_url='http://www.bing.com/search',
+                safe_parameter='adlt=strict',css_selector='li.b_algo')
+yahoo_search_reprog = re.compile(r'/RU=(.+?)/R[A-Z]=')
+SafeYahoo = SafeWebSearch(search_url='http://search.yahoo.com/search', query_parameter='p',
+                safe_parameter='adlt=strict',css_selector='div.compTitle',
+                result_extraction=lambda x: yahoo_search_reprog.findall(uprs.parse_qs(x)['_ylu'][0])[0])
+SafeDuckDuckGo = SafeWebSearch(search_url='http://www.duckduckgo.com/',
+                safe_parameter='kp=1',css_selector='div.result__body')
 
 class ISPDataPollution:
     """
@@ -150,7 +177,6 @@ images, and respects robots.txt, which all provide good security.
                  max_links_per_page=max_links_per_page,
                  max_links_per_domain=max_links_per_domain,
                  user_agent=user_agent,
-                 search_url=search_url,
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
@@ -162,7 +188,6 @@ images, and respects robots.txt, which all provide good security.
         self.max_links_per_page = max_links_per_page
         self.max_links_per_domain = max_links_per_domain
         self.user_agent = user_agent
-        self.search_url = search_url
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
         self.seed_bias_links = seed_bias_links
@@ -649,7 +674,10 @@ a fraction of the time. """
         :param query: 
         :return: 
         """
-        url = uprs.urlunparse(uprs.urlparse(self.search_url)._replace(query='q={}&safe=active'.format(query)))
+        self.select_random_search_engine()
+        url = uprs.urlunparse(uprs.urlparse(self.SafeSearch.search_url)._replace(query='{}={}{}&{}'.format(
+            self.SafeSearch.query_parameter,uprs.quote_plus(query),
+            self.SafeSearch.additional_parameters,self.SafeSearch.safe_parameter)))
         if self.verbose: self.print_url(url)
         @self.phantomjs_timeout
         def phantomjs_get(): self.driver.get(url)  # selenium driver
@@ -660,6 +688,10 @@ a fraction of the time. """
         new_links = self.websearch_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
+    def select_random_search_engine(self):
+        self.SafeSearch = random.choice([SafeGoogle, SafeBing, SafeYahoo, SafeDuckDuckGo])
+        return self.SafeSearch
+
     def websearch_links(self):
         """
         Webpage format for a popular search engine, <div class="g">.
@@ -668,20 +700,22 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.phantomjs_short_timeout
         def phantomjs_find_elements_by_css_selector():
-            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_css_selector('div.g'))
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_css_selector(self.SafeSearch.css_selector))
         elements = phantomjs_find_elements_by_css_selector()
         # get links in random order until max. per page
         k = 0
         links = []
         try:
-            for div in sorted(elements,key=lambda k: random.random()):
+            for elt in sorted(elements,key=lambda k: random.random()):
                 @self.phantomjs_short_timeout
-                def phantomjs_find_element_by_tag_name(): return div.find_element_by_tag_name('a')
+                def phantomjs_find_element_by_tag_name(): return elt.find_element_by_tag_name('a')
                 a_tag = phantomjs_find_element_by_tag_name()
                 @self.phantomjs_short_timeout
                 def phantomjs_get_attribute(): return a_tag.get_attribute('href')
                 href = phantomjs_get_attribute()
-                if href is not None: links.append(href)
+                if href is not None:
+                    href = self.SafeSearch.result_extraction(href)
+                    links.append(href)
                 k += 1
                 if k > self.max_links_per_page or self.link_count() == self.max_links_cached: break
         except Exception as e:
