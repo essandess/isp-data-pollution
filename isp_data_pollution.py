@@ -19,7 +19,7 @@ __author__ = 'stsmith'
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '1.2'
+__version__ = '1.3'
 
 import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, re, requests, signal, sys, tarfile, time, warnings as warn
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
@@ -344,42 +344,70 @@ please upgrade to at least version {} from http://phantomjs.org.
         self.blacklist_urls = set()
         try:
             if self.blacklist:    # download the blacklist or not
-                if self.verbose: print('Downloading the blacklist… ',end='',flush=True)
+                if self.verbose: print('Downloading the blacklists… ',end='',flush=True)
             else:
                 raise Exception('Skip downloading the blacklist.')
-            # http://stackoverflow.com/questions/18623842/read-contents-tarfile-into-python-seeking-backwards-is-not-allowed
-            tgzstream = urllib.request.urlopen(urllib.request.Request(self.blacklist_url, headers={'User-Agent': self.user_agent}))
-            tmpfile = BytesIO()
-            while True:
-                s = tgzstream.read(16384)
-                if not s: break
-                tmpfile.write(s)
-            tgzstream.close()
-            tmpfile.seek(0)
-            tgz = tarfile.open(fileobj=tmpfile, mode='r:gz')
-            # bash$ ls BL
-            # COPYRIGHT	education	isp		recreation	updatesites
-            # adv		finance		jobsearch	redirector	urlshortener
-            # aggressive	fortunetelling	library		religion	violence
-            # alcohol		forum		military	remotecontrol	warez
-            # anonvpn		gamble		models		ringtones	weapons
-            # automobile	global_usage	movies		science		webmail
-            # chat		government	music		searchengines	webphone
-            # costtraps	hacking		news		sex		webradio
-            # dating		hobby		podcasts	shopping	webtv
-            # downloads	homestyle	politics	socialnet
-            # drugs		hospitals	porn		spyware
-            # dynamic		imagehosting	radiotv		tracker
-            for member in [ 'downloads', 'drugs', 'hacking', 'gamble', 'porn', 'spyware', 'updatesites', 'urlshortener', 'violence', 'warez', 'weapons' ]:
-                self.blacklist_domains |= set(tgz.extractfile('BL/{}/domains'.format(member)).read().decode('utf-8').splitlines())
-                self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
-            tgz.close()
-            tmpfile.close()
-            if self.verbose: print('done.',flush=True)
+            self.get_shalla_blacklist()
+            if self.verbose: print('Shallalist done… ', end='', flush=True)
+            self.get_easylist_blacklist()
+            if self.verbose: print('EasyList done.', flush=True)
         except Exception as e:
             if self.verbose: print(e)
+        # Make sure blacklists are not empty
+        if self.blacklist:
+            try:
+                assert self.blacklist_domains != set() or self.blacklist_urls != set()
+            except AssertionError as e:
+                print(e)
+                print('Empty blacklists! Exiting.')
+                sys.exit(1)
         # ignore problem urls
         self.blacklist_urls |= { 'about:blank' }
+
+    def get_shalla_blacklist(self):
+        # http://stackoverflow.com/questions/18623842/read-contents-tarfile-into-python-seeking-backwards-is-not-allowed
+        tgzstream = urllib.request.urlopen(urllib.request.Request(self.blacklist_url, headers={'User-Agent': self.user_agent}))
+        tmpfile = BytesIO()
+        while True:
+            s = tgzstream.read(16384)
+            if not s: break
+            tmpfile.write(s)
+        tgzstream.close()
+        tmpfile.seek(0)
+        tgz = tarfile.open(fileobj=tmpfile, mode='r:gz')
+        # bash$ ls BL
+        # COPYRIGHT	education	isp		recreation	updatesites
+        # adv		finance		jobsearch	redirector	urlshortener
+        # aggressive	fortunetelling	library		religion	violence
+        # alcohol		forum		military	remotecontrol	warez
+        # anonvpn		gamble		models		ringtones	weapons
+        # automobile	global_usage	movies		science		webmail
+        # chat		government	music		searchengines	webphone
+        # costtraps	hacking		news		sex		webradio
+        # dating		hobby		podcasts	shopping	webtv
+        # downloads	homestyle	politics	socialnet
+        # drugs		hospitals	porn		spyware
+        # dynamic		imagehosting	radiotv		tracker
+        for member in [ 'downloads', 'drugs', 'hacking', 'gamble', 'porn', 'spyware', 'updatesites', 'urlshortener', 'violence', 'warez', 'weapons' ]:
+            self.blacklist_domains |= set(tgz.extractfile('BL/{}/domains'.format(member)).read().decode('utf-8').splitlines())
+            self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
+        tgz.close()
+        tmpfile.close()
+
+    def get_easylist_blacklist(self):
+        # Malware lists from open source AdBlock and spam404.com lists
+        malwaredomains_full = 'https://easylist-downloads.adblockplus.org/malwaredomains_full.txt'
+        spam404_com_adblock_list = 'https://raw.githubusercontent.com/Dawsey21/Lists/master/adblock-list.txt'
+        spam404_com_main_blacklist = 'https://raw.githubusercontent.com/Dawsey21/Lists/master/main-blacklist.txt'  # not EasyList format
+        download_list = list(set([malwaredomains_full, spam404_com_adblock_list, spam404_com_main_blacklist]))
+        download_parse = { malwaredomains_full: True, spam404_com_adblock_list: True, spam404_com_main_blacklist: False }
+
+        for url in download_list:
+            resp = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': self.user_agent}))
+            for line in resp:
+                line = line.decode('utf-8').rstrip()
+                if download_parse[url]: self.parse_and_filter_rule_urls(line)
+                else: self.blacklist_domains |= set([line])
 
     def get_random_words(self):
         try:
@@ -560,6 +588,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
             self.start_time = time.time()
             self.data_usage = 0
             self.decimate_links(total_frac=0.49, decimate_frac=0.333)
+            self.get_blacklist()  # reload the latest blacklists
 
     def decimate_links(self, total_frac=0.81, decimate_frac=0.1, log_sampling=False):
         """ Delete `decimate_frac` of links if the total exceeds `total_frac` of the maximum allowed. """
@@ -928,8 +957,95 @@ a fraction of the time. """
                 self.quit_driver(pid=pid)
                 self.open_driver()
         else:  # throw in the towel and exit if no viable phantomjs process after multiple attempts
-            sys.exit()
+            print('No viable phantomjs process after multiple attempts!')
+            sys.exit(1)
         return (pid, rss_mb)
+
+    def parse_and_filter_rule_urls(self,line):
+        """Convert EasyList domain anchor rule to domain or url."""
+        line = line.rstrip()
+        # filter out configuration, comment, exception lines, domain-specific, and selector rules
+        if re_test(configuration_re, line) or re_test(comment_re, line) or re_test(exception_re, line) or re_test(
+            domain_option_re, line) or re_test(selector_re, line): return
+        if re_test(option_re, line):
+            line = option_re.sub('\\1', line)  # delete all the options and continue
+        # ignore these cases
+        # blank url case: ignore
+        if re_test(httpempty_re, line): return
+        # blank line case: ignore
+        if not bool(line): return
+        # parse all remaining rules
+        # treat each of the these cases separately
+        # regex case: ignore
+        if re_test(regex_re, line): return
+        # now that regex's are handled, delete unnecessary wildcards, e.g. /.../*
+        line = wildcard_begend_re.sub('\\1', line)
+        # domain anchors, || or '|http://a.b' -> domain anchor 'a.b' for regex efficiency in JS
+        if re_test(domain_anch_re, line) or re_test(scheme_anchor_re, line):
+            # strip off initial || or |scheme://
+            if re_test(domain_anch_re, line):
+                line = domain_anch_re.sub('\\1', line)
+            elif re_test(scheme_anchor_re, line):
+                line = scheme_anchor_re.sub("", line)
+            # host subcase
+            if re_test(da_hostonly_re, line):
+                line = da_hostonly_re.sub('\\1', line)
+                if not re_test(wild_anch_sep_exc_re, line):  # exact subsubcase
+                    if wildcard_ignore_test(line): return
+                    self.blacklist_domains |= set([line])
+                    return line
+                else:
+                    return  # regex subsubcase
+            # hostpath subcase
+            if re_test(da_hostpath_re, line):
+                line = da_hostpath_re.sub('\\1', line)
+                if not re_test(wild_sep_exc_noanch_re, line) and re_test(pathend_re, line):  # exact subsubcase
+                    line = re.sub(r'[/|]$', '', line)  # strip EOL slashes and anchors
+                    if wildcard_ignore_test(line): return
+                    self.blacklist_urls |= set([line])
+                    return line
+                else:
+                    return  # regex subsubcase
+            # hostpathquery default case
+            if wildcard_ignore_test(line): return
+            self.blacklist_urls |= set([line])
+            return line
+        # all other non-regex patterns in for the path parts: ignore
+        return
+
+
+# EasyList regular expressions
+# See https://github.com/essandess/easylist-pac-privoxy
+comment_re = re.compile(r'^\s*?!')   # ! commment
+configuration_re = re.compile(r'^\s*?\[[^]]*?\]')  # [Adblock Plus 2.0]
+easylist_opts = r'~?\b(?:third\-party|domain|script|image|stylesheet|object(?!-subrequest)|object\-subrequest|xmlhttprequest|subdocument|ping|websocket|webrtc|document|elemhide|generichide|genericblock|other|sitekey|match-case|collapse|donottrack|popup|media|font)\b'
+option_re = re.compile(r'^(.*?)\$(' + easylist_opts + r'.*?)$')
+# regex's used to exclude options for specific cases
+domain_option_re = re.compile(r'\$.*?(?:domain=)')  # discards rules specific to links from specific domains
+selector_re = re.compile(r'^(.*?)#\@?#*?.*?$') # #@##div [should be #+?, but old style still used]
+regex_re = re.compile(r'^\@{0,2}\/(.*?)\/$')
+wildcard_begend_re = re.compile(r'^(?:\**?([^*]*?)\*+?|\*+?([^*]*?)\**?)$')
+wild_anch_sep_exc_re = re.compile(r'[*|^@]')
+wild_sep_exc_noanch_re = re.compile(r'(?:[*^@]|\|[\s\S])')
+exception_re = re.compile(r'^@@(.*?)$')
+httpempty_re = re.compile(r'^\|?https?://$')
+pathend_re = re.compile(r'(?i)(?:[/|]$|\.(?:jsp?|php|xml|jpe?g|png|p?gif|img|swf|flv|[sp]?html?|f?cgi|pl?|aspx|ashx|css|jsonp?|asp|search|cfm|ico|act|act(?:ion)?|spy|do|stm|cms|txt|imu|dll|io|smjs|xhr|ount|bin|py|dyn|gne|mvc|lv|nap|jam|nhn))',re.IGNORECASE)
+
+domain_anch_re = re.compile(r'^\|\|(.+?)$')
+# omit scheme from start of rule -- this will also be done in JS for efficiency
+scheme_anchor_re = re.compile(r'^(\|?(?:[\w*+-]{1,15})?://)');  # e.g. '|http://' at start
+
+# (Almost) fully-qualified domain name extraction (with EasyList wildcards)
+# Example case: banner.3ddownloads.com^
+da_hostonly_re = re.compile(r'^((?:[\w*-]+\.)+[a-zA-Z0-9*-]{1,24}\.?)(?:$|[/^?])$')
+da_hostpath_re = re.compile(r'^((?:[\w*-]+\.)+[a-zA-Z0-9*-]{1,24}\.?[\w~%./^*-]+?)\??$')
+
+def re_test(regex,string):
+    if isinstance(regex,str): regex = re.compile(regex)
+    return bool(regex.search(string))
+
+def wildcard_ignore_test(rule):
+    return bool(wild_anch_sep_exc_re.search(rule))
 
 if __name__ == "__main__":
     ISPDataPollution()
