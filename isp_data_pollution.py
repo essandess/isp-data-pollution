@@ -85,7 +85,16 @@ property_pvals = \
         {r'Mac\s*OS': 3, r'iOS': 6, r'Linux': 1, r'Windows': 1, 'noneoftheabove': 1},
     'is_pc':
         {True: 4, False: 6},
+    'is_pc':
+        {True: 4, False: 6},
+    'is_touch_capable':
+        {True: 6, False: 4},
     }
+# project to simplex
+for tlf in property_pvals:
+    tot = 0.
+    for f in property_pvals[tlf]: tot += abs(property_pvals[tlf][f])
+    for f in property_pvals[tlf]: property_pvals[tlf][f] = abs(property_pvals[tlf][f])/tot
 
 # tell ISP that an iPad is being used
 user_agent = 'Mozilla/5.0 (iPad; CPU OS 6_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10B141 Safari/8536.25'
@@ -362,7 +371,9 @@ please upgrade to at least version {} from http://phantomjs.org.
             except Exception as e:
                 if self.debug: print('.execute_script() exception:\n{}'.format(e))
 
-    def get_blacklist(self):
+    def get_blacklist(self,update_flag=False):
+        blacklist_domains = getattr(self,'blacklist_domains',set())
+        blacklist_urls = getattr(self,'blacklist_urls',set())
         self.blacklist_domains = set()
         self.blacklist_urls = set()
         try:
@@ -378,12 +389,18 @@ please upgrade to at least version {} from http://phantomjs.org.
             if self.verbose: print(e)
         # Make sure blacklists are not empty
         if self.blacklist:
-            try:
-                assert self.blacklist_domains != set() or self.blacklist_urls != set()
+            try: # no fully empty collection of blacklists
+                assert (self.blacklist_domains != set() or self.blacklist_urls != set()) \
+                    and (not update_flag or (blacklist_domains != set() or blacklist_urls != set()))
             except AssertionError as e:
                 print(e)
-                print('Empty blacklists! Exiting.')
-                sys.exit(1)
+                if update_flag:
+                    self.blacklist_domains = blacklist_domains
+                    self.blacklist_urls = blacklist_urls
+                    warn.warn('Blacklists not updated; falling back on previous blacklist download.')
+                else:
+                    print('Empty blacklists! Exiting.')
+                    sys.exit(1)
         # ignore problem urls
         self.blacklist_urls |= { 'about:blank' }
 
@@ -611,7 +628,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
             self.start_time = time.time()
             self.data_usage = 0
             self.decimate_links(total_frac=0.49, decimate_frac=0.333)
-            self.get_blacklist()  # reload the latest blacklists
+            self.get_blacklist(update_flag=True)  # reload the latest blacklists
 
     def decimate_links(self, total_frac=0.81, decimate_frac=0.1, log_sampling=False):
         """ Delete `decimate_frac` of links if the total exceeds `total_frac` of the maximum allowed. """
@@ -620,7 +637,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 self.remove_link(url)
 
     def set_user_agent(self):
-        self.user_agent_draw()
+        self.draw_user_agent()
         try:
             @self.phantomjs_short_timeout
             def phantomjs_capabilities_update():
@@ -629,32 +646,37 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         except Exception as e:
             if self.debug: print('.update() exception:\n{}'.format(e))
 
-    def user_agent_draw(self):
-        """Draw a random User-Agent either uniformly (mildly susceptible to ML), or from a distribution. """
+    def draw_user_agent(self,max_draws=10000):
+        """Draw a random User-Agent either uniformly (mildly susceptible to ML), or from a matched distribution."""
         global ua_parse_flag, user_agent
-        if not ua_parse_flag:  #
+        if not ua_parse_flag:
             self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
             return
         # Draw User-Agent from pre-defined property distribution
         property_pvals = self.property_pvals
-        while True:
+        k = 0
+        while k < max_draws:
             uap = ua.parse(self.fake.user_agent())
             # print(uap.ua_string)
             p_browser = property_pvals['browser']['noneoftheabove']
-            for k in property_pvals['browser']:
-                if bool(re.findall(k, uap.browser.family, flags=re.IGNORECASE)):
-                    p_browser = property_pvals['browser'][k]
+            for ky in property_pvals['browser']:
+                if bool(re.findall(ky, uap.browser.family, flags=re.IGNORECASE)):
+                    p_browser = property_pvals['browser'][ky]
                     break
             p_os = property_pvals['os']['noneoftheabove']
-            for k in property_pvals['os']:
-                if bool(re.findall(k, uap.os.family, flags=re.IGNORECASE)):
-                    p_os = property_pvals['os'][k]
+            for ky in property_pvals['os']:
+                if bool(re.findall(ky, uap.os.family, flags=re.IGNORECASE)):
+                    p_os = property_pvals['os'][ky]
                     break
             p_pc = property_pvals['is_pc'][uap.is_pc]
+            p_touch_capable = property_pvals['is_touch_capable'][uap.is_touch_capable]
             if npr.uniform() <= p_browser \
                     and npr.uniform() <= p_os \
-                    and npr.uniform() <= p_pc: break
+                    and npr.uniform() <= p_pc \
+                    and npr.uniform() <= p_touch_capable: break
+            k += 1
         self.user_agent = uap.ua_string
+        print(self.user_agent,flush=True)
 
     def draw_link(self,log_sampling=True):
         """ Draw a single, random link. """
