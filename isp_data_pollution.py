@@ -676,7 +676,6 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                     and npr.uniform() <= p_touch_capable: break
             k += 1
         self.user_agent = uap.ua_string
-        print(self.user_agent,flush=True)
 
     def draw_link(self,log_sampling=True):
         """ Draw a single, random link. """
