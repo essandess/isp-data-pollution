@@ -19,7 +19,7 @@ __author__ = 'stsmith'
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '1.3'
+__version__ = '1.4'
 
 import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, re, requests, signal, sys, tarfile, time, warnings as warn
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
@@ -28,6 +28,14 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from io import BytesIO
 from faker import Factory
+
+# parse User-Agent for matching distribution
+ua_parse_flag = True
+try:
+    # pip install user-agents
+    import user_agents as ua
+except ImportError:
+    ua_parse_flag = False
 
 # ensure pyopenssl exists to address SNI support
 # https://stackoverflow.com/questions/18578439/using-requests-with-tls-doesnt-give-sni-support/18579484#18579484
@@ -67,8 +75,20 @@ blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
 # commercial usage. This includes all kinds of private usage.
 # The lists must not be given to any third party.
 
-# tell my ISP that I use a really awful browser, along with random user agents (below)
-user_agent = 'Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko'
+# property value distribution to match household
+property_pvals = \
+    {'DNT':  # Do Not Track HTTP header
+        {True: 0.8, False: 0.2},
+    'browser':
+        {'Safari': 6, 'Firefox': 3, 'Chrome': 2, 'noneoftheabove': 1},
+    'os':
+        {r'Mac\s*OS': 3, r'iOS': 6, r'Linux': 1, r'Windows': 1, 'noneoftheabove': 1},
+    'is_pc':
+        {True: 4, False: 6},
+    }
+
+# tell ISP that an iPad is being used
+user_agent = 'Mozilla/5.0 (iPad; CPU OS 6_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10B141 Safari/8536.25'
 
 # bias the content with non-random, diverse, link-heavy, popular content
 seed_bias_links = ['http://my.xfinity.com/news',
@@ -176,7 +196,8 @@ images, and respects robots.txt, which all provide good security.
                  max_links_cached=max_links_cached,
                  max_links_per_page=max_links_per_page,
                  max_links_per_domain=max_links_per_domain,
-                 user_agent=user_agent,
+                 property_pvals=property_pvals,
+                 user_egent=user_agent,
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
@@ -187,6 +208,7 @@ images, and respects robots.txt, which all provide good security.
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
         self.max_links_per_domain = max_links_per_domain
+        self.property_pvals = property_pvals
         self.user_agent = user_agent
         self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
@@ -216,6 +238,7 @@ images, and respects robots.txt, which all provide good security.
         self.data_usage = 0
         self.get_blacklist()
         self.get_random_words()
+        self.set_user_agent()
         self.pollute_forever()
 
     def parseArgs(self):
@@ -269,7 +292,7 @@ please upgrade to at least version {} from http://phantomjs.org.
             dcap['acceptSslCerts'] = ( True )
             dcap['applicationCacheEnabled'] = ( True )
             dcap['handlesAlerts'] = ( False )
-            dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch' } )
+            dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch', 'DNT': '1' } )
             phantomjs_service_args = ['--disk-cache=false','--ignore-ssl-errors=false','--ssl-protocol=TLSv1.2']
             if self.proxy is not None:
                 phantomjs_service_args = ['--proxy={}'.format(self.proxy)] + phantomjs_service_args
@@ -597,8 +620,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 self.remove_link(url)
 
     def set_user_agent(self):
-        global user_agent
-        self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
+        self.user_agent_draw()
         try:
             @self.phantomjs_short_timeout
             def phantomjs_capabilities_update():
@@ -606,6 +628,33 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
             phantomjs_capabilities_update()
         except Exception as e:
             if self.debug: print('.update() exception:\n{}'.format(e))
+
+    def user_agent_draw(self):
+        """Draw a random User-Agent either uniformly (mildly susceptible to ML), or from a distribution. """
+        global ua_parse_flag, user_agent
+        if not ua_parse_flag:  #
+            self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
+            return
+        # Draw User-Agent from pre-defined property distribution
+        property_pvals = self.property_pvals
+        while True:
+            uap = ua.parse(self.fake.user_agent())
+            # print(uap.ua_string)
+            p_browser = property_pvals['browser']['noneoftheabove']
+            for k in property_pvals['browser']:
+                if bool(re.findall(k, uap.browser.family, flags=re.IGNORECASE)):
+                    p_browser = property_pvals['browser'][k]
+                    break
+            p_os = property_pvals['os']['noneoftheabove']
+            for k in property_pvals['os']:
+                if bool(re.findall(k, uap.os.family, flags=re.IGNORECASE)):
+                    p_os = property_pvals['os'][k]
+                    break
+            p_pc = property_pvals['is_pc'][uap.is_pc]
+            if npr.uniform() <= p_browser \
+                    and npr.uniform() <= p_os \
+                    and npr.uniform() <= p_pc: break
+        self.user_agent = uap.ua_string
 
     def draw_link(self,log_sampling=True):
         """ Draw a single, random link. """
