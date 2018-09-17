@@ -4,7 +4,7 @@ __author__ = 'stsmith'
 
 # isp_data_pollution: bandwidth-limited ISP data pollution 
 
-# Copyright 2017 Steven T. Smith <steve dot t dot smith at gmail dot com>, GPL
+# Copyright 2017–2018 Steven T. Smith <steve dot t dot smith at gmail dot com>, GPL
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,15 +19,14 @@ __author__ = 'stsmith'
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '1.4'
+__version__ = '2.0'
 
 import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, re, requests, signal, sys, tarfile, time, warnings as warn
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
 from selenium import webdriver
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
 from io import BytesIO
-from faker import Factory
+import fake_useragent as fake_ua
 
 # parse User-Agent for matching distribution
 ua_parse_flag = True
@@ -55,14 +54,14 @@ except ImportError:
 # nice this process on UNIX
 if hasattr(os,'nice'): os.nice(15)
 
-gb_per_month = 50		# How many gigabytes to pollute per month
+gb_per_month = 100		# How many gigabytes to pollute per month
 max_links_cached = 100000	# Maximum number of links to cache for download
 max_links_per_page = 200	# Maximum number of links to add per page
 max_links_per_domain = 400	# Maximum number of links to add per domain
 wordsite_url = 'http://svnweb.freebsd.org/csrg/share/dict/words?view=co&content-type=text/plain'
-timeout = 20
-short_timeout = 3
-phantomjs_rss_limit_mb = 1024  # Default maximum meory limit of phantomjs processs (MB)
+timeout = 45
+short_timeout = 10
+browserdriver_rss_limit_mb = 1024  # Default maximum memory limit of browserdriver (chromedriver) processs (MB)
 terminal_width = 80  # tty width, standard is 80 chars; add code to adapt later
 
 blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
@@ -98,6 +97,9 @@ for tlf in property_pvals:
 
 # tell ISP that an iPad is being used
 user_agent = 'Mozilla/5.0 (iPad; CPU OS 6_1 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10B141 Safari/8536.25'
+
+# Tor browser size on Linux
+window_size = (1296,1018)
 
 # bias the content with non-random, diverse, link-heavy, popular content
 seed_bias_links = ['http://my.xfinity.com/news',
@@ -206,14 +208,14 @@ images, and respects robots.txt, which all provide good security.
                  max_links_per_page=max_links_per_page,
                  max_links_per_domain=max_links_per_domain,
                  property_pvals=property_pvals,
-                 user_egent=user_agent,
+                 user_agent=user_agent,
                  blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
                  timeout=timeout, diurnal_flag=True,
                  quit_driver_every_call=False,
                  blacklist=True,verbose=True):
-        print('This is ISP Data Pollution 🐙💨, Version {}'.format(__version__))
+        print(f'This is ISP Data Pollution 🐙💨, Version {__version__}')
         self.max_links_cached = max_links_cached
         self.max_links_per_page = max_links_per_page
         self.max_links_per_domain = max_links_per_domain
@@ -230,16 +232,16 @@ images, and respects robots.txt, which all provide good security.
         # self.debug = debug  # set in parseArgs
         self.args = self.args = self.parseArgs()
         # timeout configurable decorators
-        self.phantomjs_timeout = self.block_timeout(self.phantomjs_hang_handler, \
+        self.chromedriver_timeout = self.block_timeout(self.chromedriver_hang_handler, \
             alarm_time=self.timeout+2,errors=(self.TimeoutError,), debug=self.debug)
-        self.phantomjs_short_timeout = self.block_timeout(self.phantomjs_hang_handler, \
-            alarm_time=short_timeout+1,errors=(self.TimeoutError,Exception), debug=self.debug)
-        self.phantomjs_quit_timeout = self.block_timeout(self.phantomjs_quit_hang_handler, \
-            alarm_time=short_timeout+1,errors=(self.TimeoutError,Exception), debug=self.debug)
+        self.chromedriver_short_timeout = self.block_timeout(self.chromedriver_hang_handler, \
+            alarm_time=short_timeout+2,errors=(self.TimeoutError,Exception), debug=self.debug)
+        self.chromedriver_quit_timeout = self.block_timeout(self.chromedriver_quit_hang_handler, \
+            alarm_time=short_timeout+2,errors=(self.TimeoutError,Exception), debug=self.debug)
         self.robots_timeout = self.block_timeout(self.robots_hang_handler, \
-            alarm_time=short_timeout+1,errors=(self.TimeoutError,), debug=self.debug)
-        self.check_phantomjs_version()
-        self.fake = Factory.create()
+            alarm_time=short_timeout+2,errors=(self.TimeoutError,), debug=self.debug)
+        self.check_chromedriver_version()
+        self.fake_ua = fake_ua.UserAgent()
         self.hour_trigger = True
         self.twentyfour_hour_trigger = True
         self.domain_links = dict()
@@ -247,17 +249,16 @@ images, and respects robots.txt, which all provide good security.
         self.data_usage = 0
         self.get_blacklist()
         self.get_random_words()
-        self.set_user_agent()
         self.pollute_forever()
 
     def parseArgs(self):
         parser = ap.ArgumentParser()
         parser.add_argument('-bw', '--gb_per_month', help="GB per month", type=int, default=gb_per_month)
         parser.add_argument('-mm', '--maxmemory',
-            help="Maximum memory of phantomjs (MB); 0=>restart every link",
+            help="Maximum memory of chromedriver (MB); 0=>restart every link",
             type=int, default=1024)
-        parser.add_argument('-P', '--phantomjs-binary-path', help="Path to phantomjs binary", type=str, default=None)
-        parser.add_argument('-p', '--proxy', help="Proxy for phantomjs", type=str, default=None)
+        parser.add_argument('-P', '--chromedriver-binary-path', help="Path to chromedriver binary", type=str, default=None)
+        parser.add_argument('-p', '--proxy', help="Proxy for chromedriver", type=str, default=None)
         parser.add_argument('-g', '--debug', help="Debug flag", action='store_true')
         args = parser.parse_args()
         for k in args.__dict__: setattr(self,k,getattr(args,k))
@@ -267,109 +268,110 @@ images, and respects robots.txt, which all provide good security.
     def sanity_check_arguments(self):
         self.gb_per_month = min(2048,max(1,self.gb_per_month))  # min-max bandwidth limits
         if self.maxmemory == 0: self.quit_driver_every_call = True
-        self.phantomjs_rss_limit_mb = min(4096,max(256,self.maxmemory))  # min-max bandwidth limits
+        self.chromedriver_rss_limit_mb = min(4096,max(256,self.maxmemory))  # min-max bandwidth limits
 
-    def check_phantomjs_version(self,recommended_version=(2,1)):
+    def check_chromedriver_version(self,recommended_version=(2,41)):
         self.open_driver()
         if self.debug:
-            print("{} version is {}, {} version is {}".format(self.driver.capabilities["browserName"],
+            print("{} version is {}, chromedriver version is {}".format(self.driver.capabilities["browserName"],
                                                               self.driver.capabilities["version"],
-                                                              self.driver.capabilities["driverName"],
-                                                              self.driver.capabilities["driverVersion"]))
-        phantomjs_version = tuple(int(i) for i in self.driver.capabilities["version"].split('.'))
-        if phantomjs_version < recommended_version:
+                                                              self.driver.capabilities["chrome"]["chromedriverVersion"]))
+        chromedriver_version = tuple(int(i) for i in
+            re.sub(r'([\d.]+?) .*','\\1',self.driver.capabilities["chrome"]["chromedriverVersion"]).split('.'))
+        if chromedriver_version < recommended_version:
             warn.warn("""{} version is {};
-please upgrade to at least version {} from http://phantomjs.org.
+please upgrade to at least version {} from http://chromedriver.chromium.org/downloads.
 """.format(self.driver.capabilities["browserName"],self.driver.capabilities["version"],
            '.'.join(str(i) for i in recommended_version)))
         self.quit_driver()
 
     def open_driver(self):
         self.quit_driver()
-        if not hasattr(self, 'driver') or not isinstance(self.driver,webdriver.phantomjs.webdriver.WebDriver):
-            # phantomjs driver
-            # http://engineering.shapesecurity.com/2015/01/detecting-phantomjs-based-visitors.html
-            # https://coderwall.com/p/9jgaeq/set-phantomjs-user-agent-string
-            # http://phantomjs.org/api/webpage/property/settings.html
-            # http://stackoverflow.com/questions/23390974/phantomjs-keeping-cache
-            dcap = dict(DesiredCapabilities.PHANTOMJS)
-            # dcap['browserName'] = 'Chrome'
-            dcap['phantomjs.page.settings.userAgent'] = ( self.user_agent )
-            dcap['phantomjs.page.settings.loadImages'] = ( 'false' )
-            dcap['phantomjs.page.settings.clearMemoryCaches'] = ( 'true' )
-            dcap['phantomjs.page.settings.resourceTimeout'] = ( max(2000,int(self.timeout * 1000)) )
-            dcap['acceptSslCerts'] = ( True )
-            dcap['applicationCacheEnabled'] = ( True )
-            dcap['handlesAlerts'] = ( False )
-            dcap['phantomjs.page.customHeaders'] = ( { 'Connection': 'keep-alive', 'Accept-Encoding': 'gzip, deflate, sdch', 'DNT': '1' } )
-            phantomjs_service_args = ['--disk-cache=false','--ignore-ssl-errors=false','--ssl-protocol=TLSv1.2']
+        if not hasattr(self, 'driver') or not isinstance(self.driver,webdriver.chrome.webdriver.WebDriver):
+            # chromedriver
+            chrome_options = webdriver.ChromeOptions()
+            chrome_options.add_argument('headless')
+            chrome_options.add_argument(f'user-agent={self.user_agent}')
+            chrome_options.add_argument('window-size={:d},{:d}'.format(window_size[0],window_size[1]))
+            # Disable image downloads; see https://stackoverflow.com/questions/18657976/disable-images-in-selenium-google-chromedriver
+            chrome_options.add_argument('blink-settings=imagesEnabled=false')
+            chrome_options.add_argument('mute-audio')
             if self.proxy is not None:
-                phantomjs_service_args = ['--proxy={}'.format(self.proxy)] + phantomjs_service_args
-            if self.phantomjs_binary_path is None:
-                driver = webdriver.PhantomJS(desired_capabilities=dcap,service_args=phantomjs_service_args)
+                chrome_options.add_argument(f'proxy-server={self.proxy}')
+            if self.chromedriver_binary_path is None:
+                driver = webdriver.Chrome(chrome_options=chrome_options)
             else:
-                driver = webdriver.PhantomJS(self.phantomjs_binary_path,desired_capabilities=dcap,service_args=phantomjs_service_args)
-            driver.set_window_size(1296,1018)   # Tor browser size on Linux
+                chrome_options.binary_location = self.chromedriver_binary_path
+                driver = webdriver.Chrome(self.chromedriver_binary_path,chrome_options=chrome_options)
+            driver.set_window_size(window_size[0],window_size[1])
             driver.implicitly_wait(self.timeout)
             driver.set_page_load_timeout(self.timeout)
             driver.set_script_timeout(self.timeout)
             self.driver = driver
 
-    def quit_driver(self,hard_quit=False,pid=None,phantomjs_short_timeout_decorator=None):
+    def quit_driver(self,hard_quit=False,pid=None,chromedriver_short_timeout_decorator=None):
         """
         close, kill -9, quit, del
         :param hard_quit: 
         :param pid: 
         :return: 
-        """
+         """
+        # Use original phantomjs code for chromedriver, even though chromedriver is likely far more robust
         # http://stackoverflow.com/questions/25110624/how-to-properly-stop-phantomjs-execution
-        if phantomjs_short_timeout_decorator is None:
-            phantomjs_short_timeout_decorator = self.phantomjs_short_timeout
+        if chromedriver_short_timeout_decorator is None:
+            chromedriver_short_timeout_decorator = self.chromedriver_short_timeout
         if hasattr(self,'driver'):
             if not hard_quit:
-                @phantomjs_short_timeout_decorator
-                def phantomjs_close(): self.driver.close()
-                phantomjs_close()
+                @chromedriver_short_timeout_decorator
+                def chromedriver_close(): self.driver.close()
+                chromedriver_close()
             try:
-                @phantomjs_short_timeout_decorator
-                def phantomjs_send_signal(): self.driver.service.process.send_signal(signal.SIGTERM)
-                phantomjs_send_signal()
-            except Exception as e:
-                if self.debug: print('.send_signal() exception:\n{}'.format(e))
                 if pid is None:
-                    @phantomjs_short_timeout_decorator
-                    def phantomjs_process_pid(): return self.driver.service.process.pid
-                    pid = phantomjs_process_pid()
+                    @chromedriver_short_timeout_decorator
+                    def chromedriver_process_pid(): return self.driver.service.process.pid
+                    pid = chromedriver_process_pid()
+                @chromedriver_short_timeout_decorator
+                def chromedriver_send_signal():
+                    # Google Chrome is a child process of chromedriver
+                    for c in psutil.Process(pid).children(): c.send_signal(signal.SIGTERM)
+                    self.driver.service.process.send_signal(signal.SIGTERM)
+                chromedriver_send_signal()
+            except Exception as e:
+                if self.debug: print(f'.send_signal() exception:\n{e}')
                 if isinstance(pid,int):
                     try:
+                        # Google Chrome is a child process of chromedriver
+                        for c in psutil.Process(pid).children(): os.kill(c.pid, signal.SIGTERM)
                         os.kill(pid, signal.SIGTERM)  # overkill (pun intended)
                     except Exception as e:
-                        if self.debug: print('.kill() exception:\n{}'.format(e))
+                        if self.debug: print(f'.kill() exception:\n{e}')
             try:
-                @phantomjs_short_timeout_decorator
-                def phantomjs_quit(): self.driver.quit()
-                phantomjs_quit()
+                @chromedriver_short_timeout_decorator
+                def chromedriver_quit(): self.driver.quit()
+                chromedriver_quit()
             except Exception as e:
-                if self.debug: print('.quit() exception:\n{}'.format(e))
+                if self.debug: print(f'.quit() exception:\n{e}')
             del self.driver
 
     def clear_driver(self):
         # https://sqa.stackexchange.com/questions/10466/how-to-clear-localstorage-using-selenium-and-webdriver
         if hasattr(self, 'driver'):
             try:
-                @self.phantomjs_short_timeout
-                def phantomjs_delete_all_cookies(): self.driver.delete_all_cookies()
-                phantomjs_delete_all_cookies()
+                @self.chromedriver_short_timeout
+                def chromedriver_delete_all_cookies(): self.driver.delete_all_cookies()
+                chromedriver_delete_all_cookies()
             except Exception as e:
-                if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
+                if self.debug: print(f'.delete_all_cookies() exception:\n{e}')
             try:
-                @self.phantomjs_short_timeout
-                def phantomjs_clear():
-                    self.driver.execute_script('window.localStorage.clear();')
-                    self.driver.execute_script('window.sessionStorage.clear();')
-                phantomjs_clear()
+                @self.chromedriver_short_timeout
+                def chromedriver_clear():
+                    pass
+                    # Neither of these methods appear to work for chromedriver
+                    # self.driver.execute_script('window.localStorage.clear();')
+                    # self.driver.execute_script('window.sessionStorage.clear();')
+                chromedriver_clear()
             except Exception as e:
-                if self.debug: print('.execute_script() exception:\n{}'.format(e))
+                if self.debug: print(f'.execute_script() exception:\n{e}')
 
     def get_blacklist(self,update_flag=False):
         blacklist_domains = getattr(self,'blacklist_domains',set())
@@ -429,8 +431,8 @@ please upgrade to at least version {} from http://phantomjs.org.
         # drugs		hospitals	porn		spyware
         # dynamic		imagehosting	radiotv		tracker
         for member in [ 'downloads', 'drugs', 'hacking', 'gamble', 'porn', 'spyware', 'updatesites', 'urlshortener', 'violence', 'warez', 'weapons' ]:
-            self.blacklist_domains |= set(tgz.extractfile('BL/{}/domains'.format(member)).read().decode('utf-8').splitlines())
-            self.blacklist_urls |= set(tgz.extractfile('BL/{}/urls'.format(member)).read().decode('utf-8').splitlines())
+            self.blacklist_domains |= set(tgz.extractfile(f'BL/{member}/domains').read().decode('utf-8').splitlines())
+            self.blacklist_urls |= set(tgz.extractfile(f'BL/{member}/urls').read().decode('utf-8').splitlines())
         tgz.close()
         tmpfile.close()
 
@@ -457,7 +459,7 @@ please upgrade to at least version {} from http://phantomjs.org.
             self.words = response.content.decode('utf-8').splitlines()
             reqsession.close()
         except Exception as e:
-            if self.debug: print('requests exception:\n{}'.format(e))
+            if self.debug: print(f'requests exception:\n{e}')
             self.words = [ 'FUBAR' ]
         # if self.debug: print('There are {:d} words.'.format(len(self.words)))
 
@@ -483,10 +485,10 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 self.every_hour_tasks()
                 time.sleep(self.chi2_mean_std(0.5,0.2))
             except Exception as e:
-                if self.debug: print('.pollute() exception:\n{}'.format(e))
+                if self.debug: print(f'.pollute() exception:\n{e}')
 
     def pollute(self):
-        if not self.quit_driver_every_call: self.check_phantomjs_process()
+        if not self.quit_driver_every_call: self.check_chromedriver_process()
         if self.link_count() < 2000:
             if self.quit_driver_every_call: self.open_driver()
             self.seed_links()
@@ -535,7 +537,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 else:      # quote the first two words together
                     word = ' '.join(['"{}"'.format(' '.join(random.sample(self.words, 2))),
                                      ' '.join(random.sample(self.words, num_words-2))])
-            if self.debug: print('Seeding with search for \'{}\'…'.format(word))
+            if self.debug: print(f'Seeding with search for \'{word}\'…')
             self.get_websearch(word)
 
     def bias_links(self):
@@ -586,16 +588,18 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
             if self.hour_trigger:
                 if hasattr(self,'driver'):
                     self.set_user_agent()
-                    if True:
+                    if True: pass
+                    elif False:
+                        # `set_user_agent` reopens chromedriver now
                         self.quit_driver()
                         self.open_driver()
                     else:
                         try:
-                            @self.phantomjs_short_timeout
-                            def phantomjs_delete_all_cookies(): self.driver.delete_all_cookies()
-                            phantomjs_delete_all_cookies()
+                            @self.chromedriver_short_timeout
+                            def chromedriver_delete_all_cookies(): self.driver.delete_all_cookies()
+                            chromedriver_delete_all_cookies()
                         except Exception as e:
-                            if self.debug: print('.delete_all_cookies() exception:\n{}'.format(e))
+                            if self.debug: print(f'.delete_all_cookies() exception:\n{e}')
                     self.seed_links()
                 else: self.open_driver()
                 self.hour_trigger = False
@@ -638,25 +642,21 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
 
     def set_user_agent(self):
         self.draw_user_agent()
-        try:
-            @self.phantomjs_short_timeout
-            def phantomjs_capabilities_update():
-                self.driver.capabilities.update({'phantomjs.page.settings.userAgent': self.user_agent})
-            phantomjs_capabilities_update()
-        except Exception as e:
-            if self.debug: print('.update() exception:\n{}'.format(e))
+        # chromedriver cannot reset the User-Agent in runtime, so it must be restarted with a new UA
+        # https://stackoverflow.com/questions/50375628/how-to-change-useragent-string-in-runtime-chromedriver-selenium/50375914#50375914
+        self.open_driver()
 
     def draw_user_agent(self,max_draws=10000):
         """Draw a random User-Agent either uniformly (mildly susceptible to ML), or from a matched distribution."""
         global ua_parse_flag, user_agent
         if not ua_parse_flag:
-            self.user_agent = self.fake.user_agent() if npr.random() < 0.95 else user_agent
+            self.user_agent = self.fake_ua.random if npr.random() < 0.95 else user_agent
             return
         # Draw User-Agent from pre-defined property distribution
         property_pvals = self.property_pvals
         k = 0
         while k < max_draws:
-            uap = ua.parse(self.fake.user_agent())
+            uap = ua.parse(self.fake_ua.random)
             # print(uap.ua_string)
             p_browser = property_pvals['browser']['noneoftheabove']
             for ky in property_pvals['browser']:
@@ -751,7 +751,7 @@ a fraction of the time. """
             self.domain_links.setdefault(domain, set())
             self.domain_links[domain].add(url)
             result = True
-            # if self.debug: print('\tAdded link \'{}\'…'.format(url))
+            # if self.debug: print(f'\tAdded link \'{url}\'…')
         return result
 
     def remove_link(self,url):
@@ -778,12 +778,12 @@ a fraction of the time. """
             self.SafeSearch.query_parameter,uprs.quote_plus(query),
             self.SafeSearch.additional_parameters,self.SafeSearch.safe_parameter)))
         if self.verbose: self.print_url(url)
-        @self.phantomjs_timeout
-        def phantomjs_get(): self.driver.get(url)  # selenium driver
-        phantomjs_get()
-        @self.phantomjs_short_timeout
-        def phantomjs_page_source(): self.data_usage += len(self.driver.page_source)
-        phantomjs_page_source()
+        @self.chromedriver_timeout
+        def chromedriver_get(): self.driver.get(url)  # selenium driver
+        chromedriver_get()
+        @self.chromedriver_short_timeout
+        def chromedriver_page_source(): self.data_usage += len(self.driver.page_source)
+        chromedriver_page_source()
         new_links = self.websearch_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
@@ -797,28 +797,28 @@ a fraction of the time. """
         :return: 
         """
         # https://github.com/detro/ghostdriver/issues/169
-        @self.phantomjs_short_timeout
-        def phantomjs_find_elements_by_css_selector():
+        @self.chromedriver_short_timeout
+        def chromedriver_find_elements_by_css_selector():
             return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_css_selector(self.SafeSearch.css_selector))
-        elements = phantomjs_find_elements_by_css_selector()
+        elements = chromedriver_find_elements_by_css_selector()
         # get links in random order until max. per page
         k = 0
         links = []
         try:
             for elt in sorted(elements,key=lambda k: random.random()):
-                @self.phantomjs_short_timeout
-                def phantomjs_find_element_by_tag_name(): return elt.find_element_by_tag_name('a')
-                a_tag = phantomjs_find_element_by_tag_name()
-                @self.phantomjs_short_timeout
-                def phantomjs_get_attribute(): return a_tag.get_attribute('href')
-                href = phantomjs_get_attribute()
+                @self.chromedriver_short_timeout
+                def chromedriver_find_element_by_tag_name(): return elt.find_element_by_tag_name('a')
+                a_tag = chromedriver_find_element_by_tag_name()
+                @self.chromedriver_short_timeout
+                def chromedriver_get_attribute(): return a_tag.get_attribute('href')
+                href = chromedriver_get_attribute()
                 if href is not None:
                     href = self.SafeSearch.result_extraction(href)
                     links.append(href)
                 k += 1
                 if k > self.max_links_per_page or self.link_count() == self.max_links_cached: break
         except Exception as e:
-            if self.debug: print('.find_element_by_tag_name.get_attribute() exception:\n{}'.format(e))
+            if self.debug: print(f'.find_element_by_tag_name.get_attribute() exception:\n{e}')
         return links
 
     def get_url(self,url):
@@ -828,36 +828,36 @@ a fraction of the time. """
         :return: 
         """
         if not self.check_robots(url): return  # bail out if robots.txt says to
-        @self.phantomjs_timeout
-        def phantomjs_get(): self.driver.get(url)  # selenium driver
-        phantomjs_get()
-        @self.phantomjs_short_timeout
-        def phantomjs_page_source(): self.data_usage += len(self.driver.page_source)
-        phantomjs_page_source()
+        @self.chromedriver_timeout
+        def chromedriver_get(): self.driver.get(url)  # selenium driver
+        chromedriver_get()
+        @self.chromedriver_short_timeout
+        def chromedriver_page_source(): self.data_usage += len(self.driver.page_source)
+        chromedriver_page_source()
         new_links = self.url_links()
         if self.link_count() < self.max_links_cached: self.add_url_links(new_links,url)
 
     def url_links(self):
         """Generic webpage link finder format."""
         # https://github.com/detro/ghostdriver/issues/169
-        @self.phantomjs_short_timeout
-        def phantomjs_find_elements_by_tag_name():
-            return WebDriverWait(self.driver,3).until(lambda x: x.find_elements_by_tag_name('a'))
-        elements = phantomjs_find_elements_by_tag_name()
+        @self.chromedriver_short_timeout
+        def chromedriver_find_elements_by_tag_name():
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_tag_name('a'))
+        elements = chromedriver_find_elements_by_tag_name()
 
         # get links in random order until max. per page
         k = 0
         links = []
         try:
             for a in sorted(elements,key=lambda k: random.random()):
-                @self.phantomjs_short_timeout
-                def phantomjs_get_attribute(): return a.get_attribute('href')
-                href = phantomjs_get_attribute()
+                @self.chromedriver_short_timeout
+                def chromedriver_get_attribute(): return a.get_attribute('href')
+                href = chromedriver_get_attribute()
                 if href is not None: links.append(href)
                 k += 1
                 if k > self.max_links_per_page or self.link_count() == self.max_links_cached: break
         except Exception as e:
-            if self.debug: print('.get_attribute() exception:\n{}'.format(e))
+            if self.debug: print(f'.get_attribute() exception:\n{e}')
         return links
 
     def check_robots(self,url):
@@ -885,13 +885,13 @@ a fraction of the time. """
         if self.verbose or self.debug:
             current_url = url  # default
             try:
-                @self.phantomjs_short_timeout
-                def phantomjs_current_url(): return self.driver.current_url
-                current_url = phantomjs_current_url()
+                @self.chromedriver_short_timeout
+                def chromedriver_current_url(): return self.driver.current_url
+                current_url = chromedriver_current_url()
                 # the current_url method breaks on a lot of sites, e.g.
                 # python3 -c 'from selenium import webdriver; driver = webdriver.PhantomJS(); driver.get("https://github.com"); print(driver.title); print(driver.current_url); driver.quit()'
             except Exception as e:
-                if self.debug: print('.current_url exception:\n{}'.format(e))
+                if self.debug: print(f'.current_url exception:\n{e}')
         if self.debug:
             print("{}: {:d} links added, {:d} total, {:.1f} bits domain entropy".format(current_url,k,self.link_count(),self.domain_entropy()))
         elif self.verbose:
@@ -925,7 +925,7 @@ a fraction of the time. """
         else:
             if len(url) + chars_used > terminal_width:
                 url = url[:terminal_width-chars_used-1] + '…'
-        text = "{}{}".format(url,text_suffix)  # added white space necessary
+        text = f"{url}{text_suffix}"  # added white space necessary
         text = text[:min(terminal_width,len(text))] + ' ' * max(0,terminal_width-len(text))
         print(text,end='',flush=True)
         time.sleep(0.01)
@@ -937,19 +937,19 @@ a fraction of the time. """
     def bandwidth_test(self):
         running_bandwidth = self.data_usage/(self.elapsed_time+900.)
         running_bandwidth = running_bandwidth/407.	# Convert to GB/month, 2**30/(3600*24*30.5)
-        # if self.debug: print('Using {} GB/month'.format(running_bandwidth))
+        # if self.debug: print(f'Using {running_bandwidth} GB/month')
         return running_bandwidth > self.gb_per_month
 
-    # handle phantomjs timeouts
-    # configurable decorator to timeout phantomjs and robotparser calls
+    # handle chromedriver timeouts
+    # configurable decorator to timeout chromedriver and robotparser calls
     # http://stackoverflow.com/questions/15572288/general-decorator-to-wrap-try-except-in-python
     # Syntax:
-    # phantomjs_timeout = block_timeout(phantomjs_hang_handler)
-    # @phantomjs_timeout
-    # def phantomjs_block():
-    #     # phantomjs stuff
+    # chromedriver_timeout = block_timeout(chromedriver_hang_handler)
+    # @chromedriver_timeout
+    # def chromedriver_block():
+    #     # chromedriver stuff
     #     pass
-    # phantomjs_block()
+    # chromedriver_block()
 
     def block_timeout(self,hang_handler, alarm_time=timeout, errors=(Exception,), debug=False):
         def decorator(func):
@@ -960,7 +960,7 @@ a fraction of the time. """
                 try:
                     result = func(*args, **kwargs)
                 except errors as e:
-                    if debug: print('{} exception:\n{}'.format(func.__name__, e))
+                    if debug: print(f'{func.__name__} exception:\n{e}')
                 finally:
                     signal.alarm(0)  # cancel the alarm
                 return result
@@ -970,64 +970,64 @@ a fraction of the time. """
     class TimeoutError(Exception):
         pass
 
-    def phantomjs_hang_handler(self, signum, frame):
+    def chromedriver_hang_handler(self, signum, frame):
         # https://github.com/detro/ghostdriver/issues/334
         # http://stackoverflow.com/questions/492519/timeout-on-a-function-call
-        if self.debug: print('Looks like phantomjs has hung.')
+        if self.debug: print('Looks like chromedriver has hung.')
         try:
-            self.quit_driver(phantomjs_short_timeout_decorator=self.phantomjs_quit_timeout)
+            self.quit_driver(chromedriver_short_timeout_decorator=self.chromedriver_quit_timeout)
         except Exception as e:
             if self.debug: print(e)
         self.open_driver()
 
-    def phantomjs_quit_hang_handler(self, signum, frame):
-        raise self.TimeoutError('phantomjs .quit method is taking too long')
+    def chromedriver_quit_hang_handler(self, signum, frame):
+        raise self.TimeoutError('chromedriver .quit method is taking too long')
 
     def robots_hang_handler(self, signum, frame):
         if self.debug: print('Looks like robotparser has hung.')
         raise self.TimeoutError('robotparser is taking too long')
 
-    def check_phantomjs_process(self):
+    def check_chromedriver_process(self):
         """
-        Check if phantomjs is running.
+        Check if chromedriver is running.
         :return: 
         """
         # Check rss and restart if too large, then check existence
         # http://stackoverflow.com/questions/568271/how-to-check-if-there-exists-a-process-with-a-given-pid-in-python
         try:
             if not hasattr(self,'driver'): self.open_driver()
-            pid, rss_mb = self.phantomjs_pid_and_memory()
-            if rss_mb > self.phantomjs_rss_limit_mb:  # memory limit
+            pid, rss_mb = self.chromedriver_pid_and_memory()
+            if rss_mb > self.chromedriver_rss_limit_mb:  # memory limit
                 self.quit_driver(pid=pid)
                 self.open_driver()
-                pid, _ = self.phantomjs_pid_and_memory()
+                pid, _ = self.chromedriver_pid_and_memory()
             # check existence
             os.kill(pid, 0)
         except (OSError,psutil.NoSuchProcess,Exception) as e:
-            if self.debug: print('.phantomjs_pid_and_memory() exception:\n{}'.format(e))
+            if self.debug: print(f'.chromedriver_pid_and_memory() exception:\n{e}')
             if issubclass(type(e),psutil.NoSuchProcess):
-                raise Exception("There's a phantomjs zombie, and the thread shouldn't have reached this statement.")
+                raise Exception("There's a chromedriver zombie, and the thread shouldn't have reached this statement.")
             return False
         else:
             return True
 
-    def phantomjs_pid_and_memory(self):
-        """ Return the pid and memory (MB) of the phantomjs process,
+    def chromedriver_pid_and_memory(self):
+        """ Return the pid and memory (MB) of the chromedriver process,
         restart if it's a zombie, and exit if a restart isn't working
         after three attempts. """
         for k in range(3):    # three strikes
             try:
-                @self.phantomjs_short_timeout
-                def phantomjs_process_pid(): return self.driver.service.process.pid
-                pid = phantomjs_process_pid()
+                @self.chromedriver_short_timeout
+                def chromedriver_process_pid(): return self.driver.service.process.pid
+                pid = chromedriver_process_pid()
                 rss_mb = psutil.Process(pid).memory_info().rss / float(2 ** 20)
                 break
             except (psutil.NoSuchProcess,Exception) as e:
-                if self.debug: print('.service.process.pid exception:\n{}'.format(e))
+                if self.debug: print(f'.service.process.pid exception:\n{e}')
                 self.quit_driver(pid=pid)
                 self.open_driver()
-        else:  # throw in the towel and exit if no viable phantomjs process after multiple attempts
-            print('No viable phantomjs process after multiple attempts!')
+        else:  # throw in the towel and exit if no viable chromedriver process after multiple attempts
+            print('No viable chromedriver process after multiple attempts!')
             sys.exit(1)
         return (pid, rss_mb)
 
