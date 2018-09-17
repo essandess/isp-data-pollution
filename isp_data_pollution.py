@@ -365,10 +365,8 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
             try:
                 @self.chromedriver_short_timeout
                 def chromedriver_clear():
-                    pass
-                    # Neither of these methods appear to work for chromedriver
-                    # self.driver.execute_script('window.localStorage.clear();')
-                    # self.driver.execute_script('window.sessionStorage.clear();')
+                    self.driver.execute_script('window.localStorage.clear();')
+                    self.driver.execute_script('window.sessionStorage.clear();')
                 chromedriver_clear()
             except Exception as e:
                 if self.debug: print(f'.execute_script() exception:\n{e}')
