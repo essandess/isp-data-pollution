@@ -129,35 +129,35 @@ The screenshot of a randomly crawled web page looks like this. Note that there a
 
 # Installation
 
-Depending upon your Python (v. 3) installation, the module dependencies are `numpy`, `requests`, `selenium`, and `Faker`, as well as `phantomjs`. How you install these depends upon your OS.
+Depending upon your Python (v. 3) installation, the module dependencies are `numpy`, `requests`, `selenium`, and `fake_useragent`, as well as `chromedriver`. How you install these depends upon your OS.
 
 This involves choosing a Python (v. 3) package manager, typically `pip` or `Anaconda`.
 
 I like `pip`, so on my machines I would say:
 
 ```
-sudo pip-3.4 install numpy requests selenium Faker OpenSSL
+sudo pip-3.4 install numpy requests selenium fake_useragent OpenSSL
 ```
 
-## PhantomJS
+## ChromeDriver
 
-It is recommended that the `phantomjs` binary be installed directly from [phantomjs.org](http://phantomjs.org/download.html). Be sure to verify the [checksum](http://phantomjs.org/download.html#checksums) of the downloaded installation.
+It is recommended that the `chromedriver` binary be installed directly from [chromedriver.chromium.org](http://chromedriver.chromium.org/downloads. Be sure to verify the [Etag](https://chromedriver.storage.googleapis.com/index.html?path=2.42/) of the downloaded installation.
 
 ## macOS
 
 The [MacPorts](https://www.macports.org) install command is:
 
 ```
-sudo port install py34-numpy py34-requests py34-psutil py34-openssl phantomjs psutil
+sudo port install chromedriver py36-numpy py36-requests py36-psutil py36-openssl psutil
 ```
 
 This is what was also necessary on macOS:
 
 ```
-sudo port install phantomjs
-sudo -H pip-3.4 install selenium
+sudo port install chromedriver
+sudo -H pip-3.6 install selenium fake_useragent
 
-# if phantonjs fails to build because of an Xode configuration error: test with
+# if chromedriver fails to install because of an Xode configuration error: test with
 /usr/bin/xcrun -find xcrun
 # then do this:
 cd /Applications/Xcode.app/Contents/Developer/usr/bin/
@@ -175,7 +175,7 @@ sudo yum -y install https://centos7.iuscommunity.org/ius-release.rpm
 sudo yum -y groupinstall development
 sudo yum -y install python34 python34-pip python34-devel python34-pyflakes openssl-devel
 sudo pip3 install --upgrade pip
-sudo pip3 install numpy psutil requests selenium faker pyopenssl
+sudo pip3 install numpy psutil requests selenium fake_useragent pyopenssl
 ```
 
 ### Ubuntu16
@@ -191,7 +191,7 @@ pip3 install psutil
 sudo -H pip3 install psutil --upgrade
 sudo -H pip3 install --upgrade pip
 sudo -H pip3 install selenium
-sudo -H pip3 install faker
+sudo -H pip3 install fake_useragent
 sudo -H pip3 install pyopenssl
 sudo apt-get install fontconfig
 sudo apt-get install libfontconfig
@@ -199,11 +199,12 @@ sudo apt-get install build-essential chrpath libssl-dev libxft-dev
 sudo apt-get install libfreetype6 libfreetype6-dev
 sudo apt-get install libfontconfig1 libfontconfig1-dev
 
-export PHANTOM_JS="phantomjs-2.1.1-linux-x86_64"
-sudo mv $PHANTOM_JS /usr/local/share
+#! Please update these commands for chromedriver
+# export PHANTOM_JS="phantomjs-2.1.1-linux-x86_64"
+# sudo mv $PHANTOM_JS /usr/local/share
 ls /usr/local/share
-sudo ln -sf /usr/local/share/$PHANTOM_JS/bin/phantomjs /usr/local/bin
-phantomjs --version
+# sudo ln -sf /usr/local/share/$PHANTOM_JS/bin/phantomjs /usr/local/bin
+# phantomjs --version
 python3 isp_data_pollution.py
 ```
 
@@ -211,7 +212,7 @@ If you are behind a firewall, use `sudo -EH` to inherit `http_proxy` environment
 
 ## Headless
 
-`phantomjs` requires some graphical software, virtual or otherwise, so on a headless computer, you'll need the following system package and local package.
+`chromedriver` requires some graphical software, virtual or otherwise, so on a headless computer, you'll need the following system package and local package.
 
 If you're not using virtualenv (below) then run pip as sudo.
 
@@ -226,6 +227,6 @@ In order to isolate pip library files, virtualenv is convenient. If you prefer t
 ```
 pushd ~/.virtualenvs/ && virtualenv -p python3 isp-pollute && popd
 workon isp-pollute
-pip install numpy requests selenium Faker psutil
-sudo apt-get install phantomjs
+pip install numpy requests selenium fake_useragent psutil
+sudo apt-get install chromedriver
 ```
