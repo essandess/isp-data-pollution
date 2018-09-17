@@ -10,7 +10,7 @@ If everyone uses all the data they've paid for to pollute their browsing history
 
 The [alternative](https://arstechnica.com/information-technology/2017/03/how-isps-can-sell-your-web-history-and-how-to-stop-them/) of using a VPN or Tor merely pushes the issue onto to the choice of VPN provider, complicates networking, and adds the real issue of navigating captchas when appearing as a Tor exit node. Also, merely encrypted traffic has too much [exploitable side-channel information](https://www.theatlantic.com/technology/archive/2017/03/encryption-wont-stop-your-internet-provider-from-spying-on-you/521208/), and could still be used to determine when specific family members are at home, and the activities in which they're engaged.
 
-This crawler uses [chromedriver](http://chromedriver.chromium.org) the Python selenium library, uses blacklists for undesirable websites (see the code for details), does not download images, and respects robots.txt, which all provide good security.
+This crawler uses [chromedriver](http://chromedriver.chromium.org) with the Python selenium library, uses blacklists for undesirable websites (see the code for details), does not download images, and respects robots.txt, which all provide good security.
 
 # Command Line
 
