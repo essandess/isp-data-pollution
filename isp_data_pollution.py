@@ -241,7 +241,7 @@ images, and respects robots.txt, which all provide good security.
         self.robots_timeout = self.block_timeout(self.robots_hang_handler, \
             alarm_time=short_timeout+2,errors=(self.TimeoutError,), debug=self.debug)
         self.check_chromedriver_version()
-        self.fake_ua = fake_ua.UserAgent()
+        self.get_useragents()
         self.hour_trigger = True
         self.twentyfour_hour_trigger = True
         self.domain_links = dict()
@@ -370,6 +370,18 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
                 chromedriver_clear()
             except Exception as e:
                 if self.debug: print(f'.execute_script() exception:\n{e}')
+
+    def get_useragents(self):
+        for attempt in range(5):
+            try:
+                self.fake_ua = fake_ua.UserAgent()
+            except urllib.error.URLError as e:
+                if self.debug: print(f'.UserAgent exception #{attempt}:\n{e}')
+            else:
+                break
+        else:
+            print('Too many .UserAgent failures. Exiting.')
+            sys.exit(1)
 
     def get_blacklist(self,update_flag=False):
         blacklist_domains = getattr(self,'blacklist_domains',set())
