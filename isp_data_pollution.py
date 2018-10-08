@@ -375,7 +375,7 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
         for attempt in range(5):
             try:
                 self.fake_ua = fake_ua.UserAgent()
-            except urllib.error.URLError as e:
+            except (fake_ua.errors.FakeUserAgentError,urllib.error.URLError) as e:
                 if self.debug: print(f'.UserAgent exception #{attempt}:\n{e}')
             else:
                 break
