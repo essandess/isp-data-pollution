@@ -19,7 +19,7 @@ __author__ = 'stsmith'
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-__version__ = '2.0'
+__version__ = '2.0.1'
 
 import argparse as ap, datetime as dt, importlib, numpy as np, numpy.random as npr, os, psutil, random, re, requests, signal, sys, tarfile, time, warnings as warn
 import urllib.request, urllib.robotparser as robotparser, urllib.parse as uprs
@@ -299,7 +299,7 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
             if self.proxy is not None:
                 chrome_options.add_argument(f'proxy-server={self.proxy}')
             if self.chromedriver_binary_path is None:
-                driver = webdriver.Chrome(chrome_options=chrome_options)
+                driver = webdriver.Chrome(options=chrome_options)
             else:
                 chrome_options.binary_location = self.chromedriver_binary_path
                 driver = webdriver.Chrome(self.chromedriver_binary_path,chrome_options=chrome_options)
