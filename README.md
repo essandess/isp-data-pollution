@@ -136,7 +136,7 @@ This involves choosing a Python (v. 3) package manager, typically `pip` or `Anac
 I like `pip`, so on my machines I would say:
 
 ```
-sudo pip-3.4 install numpy requests selenium fake_useragent OpenSSL
+sudo pip-3.7 install numpy requests selenium fake_useragent OpenSSL
 ```
 
 ## ChromeDriver
@@ -148,14 +148,14 @@ It is recommended that the `chromedriver` binary be installed directly from [chr
 The [MacPorts](https://www.macports.org) install command is:
 
 ```
-sudo port install chromedriver py36-numpy py36-requests py36-psutil py36-openssl psutil
+sudo port install chromedriver py37-numpy py37-requests py37-psutil py37-openssl psutil
 ```
 
 This is what was also necessary on macOS:
 
 ```
 sudo port install chromedriver
-sudo -H pip-3.6 install selenium fake_useragent
+sudo -H pip-3.7 install selenium fake_useragent
 
 # if chromedriver fails to install because of an Xode configuration error: test with
 /usr/bin/xcrun -find xcrun
