@@ -5,6 +5,7 @@ __author__ = 'stsmith'
 # isp_data_pollution: bandwidth-limited ISP data pollution 
 
 # Copyright 2017–2018 Steven T. Smith <steve dot t dot smith at gmail dot com>, GPL
+# Copyright 2021 Mark Silinio <mark dot silinio at gmail dot com>, GPL
 
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -540,13 +541,13 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         if self.link_count() < self.max_links_cached:
             num_words = max(1,npr.poisson(1.33)+1)  # mean of 1.33 words per search
             if num_words == 1:
-                word = ' '.join(random.sample(self.words,num_words))
+                word = ' '.join(random.sample(list(self.words),num_words))
             else:
                 if npr.uniform() < 0.5:
-                    word = ' '.join(random.sample(self.words,num_words))
+                    word = ' '.join(random.sample(list(self.words),num_words))
                 else:      # quote the first two words together
-                    word = ' '.join(['"{}"'.format(' '.join(random.sample(self.words, 2))),
-                                     ' '.join(random.sample(self.words, num_words-2))])
+                    word = ' '.join(['"{}"'.format(' '.join(random.sample(list(self.words), 2))),
+                                     ' '.join(random.sample(list(self.words), num_words-2))])
             if self.debug: print(f'Seeding with search for \'{word}\'…')
             self.get_websearch(word)
 
@@ -707,12 +708,12 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
                 for k in range(cnts.shape[0]):
                     domain = domain_array[k]
                     cnt = min(cnts[k],domain_count[k])
-                    for url in random.sample(self.domain_links[domain],cnt):
+                    for url in random.sample(list(self.domain_links[domain]),cnt):
                         urls.append(url)
             else:
                 k = int(np.nonzero(cnts)[0])
                 domain = domain_array[k]
-                url = random.sample(self.domain_links[domain],1)[0]
+                url = random.sample(list(self.domain_links[domain]),1)[0]
                 urls.append(url)
         return urls
 
@@ -735,7 +736,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
     def draw_link_from_domain(self,domain):
         """ Draw a single, random link from a specific domain. """
         domain_count = len(self.domain_links.get(domain,set()))
-        url = random.sample(self.domain_links[domain],1)[0] if domain_count > 0 else None
+        url = random.sample(list(self.domain_links[domain]),1)[0] if domain_count > 0 else None
         return url
 
     def pop_link(self,remove_link_fraction=0.95,current_preferred_domain_fraction=0.1):
