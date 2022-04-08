@@ -497,7 +497,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
     def domain_entropy(self):
         result = 0.
         domain_count = np.array([(dmn, len(self.domain_links[dmn])) for dmn in self.domain_links])
-        p = np.array([np.float(c) for d, c in domain_count])
+        p = np.array([float(c) for d, c in domain_count])
         count_total = p.sum()
         if count_total > 0:
             p = p / p.sum()
@@ -676,7 +676,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         urls = []
         domain_array = np.array([dmn for dmn in self.domain_links])
         domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
-        p = np.array([np.float(c) for c in domain_count])
+        p = np.array([float(c) for c in domain_count])
         count_total = p.sum()
         if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
             p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
@@ -701,7 +701,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         domain = None
         domain_array = np.array([dmn for dmn in self.domain_links])
         domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
-        p = np.array([np.float(c) for c in domain_count])
+        p = np.array([float(c) for c in domain_count])
         count_total = p.sum()
         if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
             p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
@@ -789,7 +789,7 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.chromedriver_short_timeout
         def chromedriver_find_elements_by_css_selector():
-            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_css_selector(self.SafeSearch.css_selector))
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements(by=By.CSS_SELECTOR, value=self.SafeSearch.css_selector))
         elements = chromedriver_find_elements_by_css_selector()
         # get links in random order until max. per page
         k = 0
@@ -797,7 +797,7 @@ a fraction of the time. """
         try:
             for elt in sorted(elements,key=lambda k: random.random()):
                 @self.chromedriver_short_timeout
-                def chromedriver_find_element_by_tag_name(): return elt.find_element_by_tag_name('a')
+                def chromedriver_find_element_by_tag_name(): return elt.find_element(by=By.TAG_NAME, value='a')
                 a_tag = chromedriver_find_element_by_tag_name()
                 @self.chromedriver_short_timeout
                 def chromedriver_get_attribute(): return a_tag.get_attribute('href')
@@ -832,7 +832,7 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.chromedriver_short_timeout
         def chromedriver_find_elements_by_tag_name():
-            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_tag_name('a'))
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_element(by=By.TAG_NAME, value='a'))
         elements = chromedriver_find_elements_by_tag_name()
 
         # get links in random order until max. per page
