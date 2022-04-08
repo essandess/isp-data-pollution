@@ -64,16 +64,6 @@ short_timeout = 10
 browserdriver_rss_limit_mb = 1024  # Default maximum memory limit of browserdriver (chromedriver) processs (MB)
 terminal_width = 80  # tty width, standard is 80 chars; add code to adapt later
 
-blacklist_url = 'http://www.shallalist.de/Downloads/shallalist.tar.gz'
-# Usage of the Shalla Blacklists:
-# ===============================
-#
-# The Shalla Blacklists are property of Shalla Secure Services.
-#
-# This collection of url lists may be used for free for non
-# commercial usage. This includes all kinds of private usage.
-# The lists must not be given to any third party.
-
 # property value distribution to match household
 property_pvals = \
     {'DNT':  # Do Not Track HTTP header
@@ -209,7 +199,6 @@ images, and respects robots.txt, which all provide good security.
                  max_links_per_domain=max_links_per_domain,
                  property_pvals=property_pvals,
                  user_agent=user_agent,
-                 blacklist_url=blacklist_url,
                  wordsite_url=wordsite_url,
                  seed_bias_links=seed_bias_links,
                  timeout=timeout, diurnal_flag=True,
@@ -221,7 +210,6 @@ images, and respects robots.txt, which all provide good security.
         self.max_links_per_domain = max_links_per_domain
         self.property_pvals = property_pvals
         self.user_agent = user_agent
-        self.blacklist_url = blacklist_url
         self.wordsite_url = wordsite_url
         self.seed_bias_links = seed_bias_links
         self.blacklist = blacklist; self.verbose = verbose
@@ -393,10 +381,10 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
                 if self.verbose: print('Downloading the blacklists… ',end='',flush=True)
             else:
                 raise Exception('Skip downloading the blacklist.')
-            self.get_shalla_blacklist()
-            if self.verbose: print('Shallalist done… ', end='', flush=True)
             self.get_easylist_blacklist()
             if self.verbose: print('EasyList done.', flush=True)
+            self.get_utcapitole_blacklist()
+            if self.verbose: print('Ut-Capitole done.', flush=True)
         except Exception as e:
             if self.verbose: print(e)
         # Make sure blacklists are not empty
@@ -416,9 +404,9 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
         # ignore problem urls
         self.blacklist_urls |= { 'about:blank' }
 
-    def get_shalla_blacklist(self):
+    def get_utcapitole_blacklist(self):
         # http://stackoverflow.com/questions/18623842/read-contents-tarfile-into-python-seeking-backwards-is-not-allowed
-        tgzstream = urllib.request.urlopen(urllib.request.Request(self.blacklist_url, headers={'User-Agent': self.user_agent}))
+        tgzstream = urllib.request.urlopen(urllib.request.Request('https://dsi.ut-capitole.fr/blacklists/download/blacklists.tar.gz', headers={'User-Agent': self.user_agent}))
         tmpfile = BytesIO()
         while True:
             s = tgzstream.read(16384)
@@ -427,32 +415,24 @@ please upgrade to at least version {} from http://chromedriver.chromium.org/down
         tgzstream.close()
         tmpfile.seek(0)
         tgz = tarfile.open(fileobj=tmpfile, mode='r:gz')
-        # bash$ ls BL
-        # COPYRIGHT	education	isp		recreation	updatesites
-        # adv		finance		jobsearch	redirector	urlshortener
-        # aggressive	fortunetelling	library		religion	violence
-        # alcohol		forum		military	remotecontrol	warez
-        # anonvpn		gamble		models		ringtones	weapons
-        # automobile	global_usage	movies		science		webmail
-        # chat		government	music		searchengines	webphone
-        # costtraps	hacking		news		sex		webradio
-        # dating		hobby		podcasts	shopping	webtv
-        # downloads	homestyle	politics	socialnet
-        # drugs		hospitals	porn		spyware
-        # dynamic		imagehosting	radiotv		tracker
-        for member in [ 'downloads', 'drugs', 'hacking', 'gamble', 'porn', 'spyware', 'updatesites', 'urlshortener', 'violence', 'warez', 'weapons' ]:
-            self.blacklist_domains |= set(tgz.extractfile(f'BL/{member}/domains').read().decode('utf-8').splitlines())
-            self.blacklist_urls |= set(tgz.extractfile(f'BL/{member}/urls').read().decode('utf-8').splitlines())
+        for member in ['adult', 'agressif', 'download', 'drogue', 'hacking', 'malware', 'mixed_adult', 'gambling', 'phishing', 'shortener', 'update', 'violence', 'warez']:
+            try:
+                self.blacklist_domains |= set(tgz.extractfile(f'blacklists/{member}/domains').read().decode('utf-8').splitlines())
+            except:
+                if self.verbose: print(f'Ut-Capitole:  blacklists/{member}/domains does not exist.', flush=True)
+            try:
+                self.blacklist_urls |= set(tgz.extractfile(f'blacklists/{member}/urls').read().decode('utf-8').splitlines())
+            except:
+                if self.verbose: print(f'Ut-Capitole:  blacklists/{member}/urls does not exist.', flush=True)
         tgz.close()
         tmpfile.close()
 
     def get_easylist_blacklist(self):
         # Malware lists from open source AdBlock and spam404.com lists
-        malwaredomains_full = 'https://easylist-downloads.adblockplus.org/malwaredomains_full.txt'
         spam404_com_adblock_list = 'https://raw.githubusercontent.com/Dawsey21/Lists/master/adblock-list.txt'
         spam404_com_main_blacklist = 'https://raw.githubusercontent.com/Dawsey21/Lists/master/main-blacklist.txt'  # not EasyList format
-        download_list = list(set([malwaredomains_full, spam404_com_adblock_list, spam404_com_main_blacklist]))
-        download_parse = { malwaredomains_full: True, spam404_com_adblock_list: True, spam404_com_main_blacklist: False }
+        download_list = list(set([spam404_com_adblock_list, spam404_com_main_blacklist]))
+        download_parse = {spam404_com_adblock_list: True, spam404_com_main_blacklist: False}
 
         for url in download_list:
             resp = urllib.request.urlopen(urllib.request.Request(url, headers={'User-Agent': self.user_agent}))
@@ -517,7 +497,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
     def domain_entropy(self):
         result = 0.
         domain_count = np.array([(dmn, len(self.domain_links[dmn])) for dmn in self.domain_links])
-        p = np.array([np.float(c) for d, c in domain_count])
+        p = np.array([float(c) for d, c in domain_count])
         count_total = p.sum()
         if count_total > 0:
             p = p / p.sum()
@@ -696,7 +676,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         urls = []
         domain_array = np.array([dmn for dmn in self.domain_links])
         domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
-        p = np.array([np.float(c) for c in domain_count])
+        p = np.array([float(c) for c in domain_count])
         count_total = p.sum()
         if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
             p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
@@ -721,7 +701,7 @@ Downloaded:  website.com: +LLL/NNNNN links [added], H(domain)= B bits [entropy]
         domain = None
         domain_array = np.array([dmn for dmn in self.domain_links])
         domain_count = np.array([len(self.domain_links[domain_array[k]]) for k in range(domain_array.shape[0])])
-        p = np.array([np.float(c) for c in domain_count])
+        p = np.array([float(c) for c in domain_count])
         count_total = p.sum()
         if log_sampling:  # log-sampling [log(x+1)] to bias lower count domains
             p = np.fromiter((np.log1p(x) for x in p), dtype=p.dtype)
@@ -809,7 +789,7 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.chromedriver_short_timeout
         def chromedriver_find_elements_by_css_selector():
-            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_css_selector(self.SafeSearch.css_selector))
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements(by=By.CSS_SELECTOR, value=self.SafeSearch.css_selector))
         elements = chromedriver_find_elements_by_css_selector()
         # get links in random order until max. per page
         k = 0
@@ -817,7 +797,7 @@ a fraction of the time. """
         try:
             for elt in sorted(elements,key=lambda k: random.random()):
                 @self.chromedriver_short_timeout
-                def chromedriver_find_element_by_tag_name(): return elt.find_element_by_tag_name('a')
+                def chromedriver_find_element_by_tag_name(): return elt.find_element(by=By.TAG_NAME, value='a')
                 a_tag = chromedriver_find_element_by_tag_name()
                 @self.chromedriver_short_timeout
                 def chromedriver_get_attribute(): return a_tag.get_attribute('href')
@@ -852,7 +832,7 @@ a fraction of the time. """
         # https://github.com/detro/ghostdriver/issues/169
         @self.chromedriver_short_timeout
         def chromedriver_find_elements_by_tag_name():
-            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_elements_by_tag_name('a'))
+            return WebDriverWait(self.driver,short_timeout).until(lambda x: x.find_element(by=By.TAG_NAME, value='a'))
         elements = chromedriver_find_elements_by_tag_name()
 
         # get links in random order until max. per page
