@@ -1,0 +1,4 @@
+numpy
+psutil
+selenium
+fake_useragent
